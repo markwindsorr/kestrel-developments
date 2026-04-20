@@ -238,3 +238,147 @@ Revised Developer Priorities Given the Above
 ItemStatusActionSage 300cloud API✅ ReadyUse REST/OData endpoints; confirm version 2024.2+Job Costing from Sage✅ AvailablePull via Project & Job Costing API moduleWagepoint integration⚠️ PartialCSV export format — skip live APILabor job costing✅ Build in-appHours by job captured in your time clockiMessage❌ Not possibleReplace with Twilio SMSWhatsApp✅ OptionalAdd via Twilio WhatsApp API as phase 2Google Sheets✅ ReadyGoogle Sheets API for migration + bridge sync
 One last thing worth flagging — since you're on Sage 300cloud for Mac and running this as a web app, you'll want your developer to verify whether your Sage license is hosted by Sage (true SaaS) or hosted on a server somewhere that you access via browser. That affects whether the API is exposed over a public URL or requires a server-side connector. A quick call to your Sage account rep will answer this in 10 minutes and save your developer hours of guesswork.
 
+also would like to include a takeoff feature that takes some characteristics of square takeoff. I want to be able to set a scale to a drawings, and measure the square foootage of the construction drawings for flooring, siding, roofs, etc. 
+I would also like to when starting a new project to send out one message requesting a quote that will seperatley send the plans and a message to each sub contractor.
+
+11:20 PM
+Great additions — both of these are high-value features. Let me research what's actually involved in building a takeoff tool before adding it to the brief.
+
+
+Searched the web
+Searched the web
+Good — I have everything I need. Here's the full spec for both new modules added to your brief:
+
+Module 11 — Digital Takeoff Tool
+This is built directly into your app, tied to each project. No separate subscription to Square Takeoff or anything else — it's yours.
+
+How It Works (the full user flow for your developer)
+Step 1 — Upload Plans
+
+Drag and drop PDF, JPG, or PNG construction drawings directly into the project
+Multi-page PDF sets are supported — a 15-page plan set loads as one document, each sheet independently accessible
+Plans render at full resolution in the browser using PDF.js (free, open-source library from Mozilla — this is the exact engine your developer should use. PDF.js Express adds the measurement annotation layer on top of it and has a construction-ready SDK)
+Step 2 — Set the Scale (Two Methods)
+
+Method A — Auto-detect: If your architect prints the scale notation on the sheet (e.g. "1/4" = 1'-0""), the app reads it automatically from the PDF metadata or text layer and sets calibration without any input from you.
+
+Method B — Manual calibration: Select the calibrate tool, click and drag along a known measurement on the drawing — like the length of an interior wall or a dimension already printed on the plan — and type in the real-world distance. The app sets the scale from that point forward. 
+Drawboard
+ This is exactly how Square Takeoff works. Each page in a multi-page set can hold its own scale, and scale defaults carry forward as you navigate between sheets. 
+Easy Takeoffs
+
+Common preset scales your developer should include for Canadian residential construction: 1/4"=1'-0", 1/8"=1'-0", 3/16"=1'-0", 1:50, 1:100, 1:200 — selectable from a dropdown if the drawing scale is already known.
+
+Step 3 — Measure
+
+Five tool types cover everything you need: Area (square footage for rooms and spaces), Linear (wall lengths, eaves, perimeter), Count (windows, doors, fixtures), Volume (cubic quantities like concrete), and Polygon (irregular shapes like a hip roof or an angled room). 
+Houzz
+
+For your specific use cases:
+
+Flooring: Polygon tool traces room outlines → instant square footage. Rectangle tool for simple rooms. Deduct areas (closets, islands) by subtracting polygons.
+Siding: Linear tool traces wall lengths, area tool captures wall face square footage. Deduct window and door openings.
+Roofing: Polygon tool traces roof planes on the roof plan drawing. The app calculates the flat area — you apply your pitch multiplier (e.g. 1.15× for a 6/12 pitch) to get actual surface area. Your developer can build the pitch multiplier selector directly into the roofing measurement group.
+Concrete/Foundation: Area tool on foundation plan + depth input = cubic yards automatically calculated.
+Step 4 — Organize by Trade
+
+Color-code measurements into groups by trade, scope, or material — running totals per group update in real time. 
+Easy Takeoffs
+ So your flooring measurements are one color and one group total, roofing another, siding another. When you're done, one glance gives you all your quantities organized by trade.
+
+Step 5 — Export & Connect to Estimating
+
+Export to CSV/Excel — quantities by group, ready to send to subs for quotes or plug into your estimate
+Export an annotated PDF — your original drawing with all the measurement overlays drawn on it, printable and shareable
+Quantities automatically flow into the project estimate inside your app — no re-entering numbers
+When you fire off quote requests to subs (Module 12 below), the takeoff quantities for their trade pre-populate the message
+Technical Library Recommendation for Your Developer
+PDF.js Express Web Viewer has built-in measurement tools — line, polyline, polygon annotations with distance, perimeter, and area — with a scale definition system where one inch on the document equals one foot in real life, and a programmatic API for fine-grained control. 
+PDF.js Express
+ This is the cleanest path to building this feature without writing a measurement engine from scratch. It's licensed (not free), but at roughly $500-1500/year it's far cheaper than building the geometry engine yourself and dramatically reduces development time.
+
+Alternative: Nutrient Web SDK enables accurate distance and area measurement in PDFs using calibrated page-to-real-world scales, with polygon area, rectangle, and distance tools and an appearance customization API. 
+Nutrient
+ Either works — your developer should evaluate both.
+
+Takeoff Data Stored Per Project
+Project: Lot 14 — 123 Oak Street
+└── Takeoff (Revision 2 — Apr 18, 2026)
+    ├── Flooring
+    │   ├── Main floor: 1,847 sq ft
+    │   ├── Second floor: 1,203 sq ft
+    │   └── Total: 3,050 sq ft
+    ├── Roofing
+    │   ├── Main roof plane: 2,140 sq ft (flat)
+    │   ├── Garage: 480 sq ft (flat)
+    │   ├── Pitch multiplier (6/12): ×1.118
+    │   └── Total actual surface: 2,921 sq ft
+    ├── Siding
+    │   ├── Front face: 840 sq ft
+    │   ├── Left face: 620 sq ft
+    │   ├── Rear face: 810 sq ft
+    │   ├── Right face: 590 sq ft
+    │   ├── Less openings: −340 sq ft
+    │   └── Total: 2,520 sq ft
+    └── Concrete (garage slab)
+        ├── Area: 480 sq ft
+        ├── Depth: 4"
+        └── Volume: 5.9 cu yd
+This data lives in the project record, versioned (so Revision 1 vs Revision 2 when plans change), and is visible to anyone with project access.
+
+Module 12 — Quote Request Blast (New Project Kickoff)
+This replaces the individual texts, calls, and emails you currently send when starting a new job. One action sends personalized, individual messages to every relevant sub.
+
+The Flow
+You do:
+
+Open a new project → click "Send Quote Requests"
+Select which trades you need quotes from (checkboxes: Framing, Electrical, Plumbing, HVAC, Insulation, Drywall, Flooring, Roofing, Siding, Concrete, Painting, etc.)
+Select which plan sheets to attach per trade (you may send the full set, or just the relevant sheets — e.g. electrical gets the electrical plan, framer gets structural and floor plans)
+Write or edit the message — a template pre-populates with the job address, required trade, and relevant takeoff quantities from Module 11 (e.g. "Roofing quote needed — approx. 2,921 sq ft actual surface area, 6/12 pitch")
+Set a quote due date
+Hit send
+What happens:
+
+Each selected sub receives a separate, individual message — not a group text
+The message goes via SMS (Twilio) to their phone number on file, with a link to download their specific plan sheets from the project portal
+If a sub has the app login, they also get an in-app notification
+The plans are served as a secure, time-limited download link — not an email attachment, no file size limits
+Each sub's response is tracked in the project dashboard
+What you see after sending:
+
+Trade	Sub	Sent	Quote Received	Amount	Status
+Framing	Mike's Framing	Apr 18	Apr 20	$47,200	✅ Accepted
+Roofing	Peak Roofing	Apr 18	—	—	⏳ Pending
+Electrical	Spark Electric	Apr 18	Apr 19	$28,500	🔄 Reviewing
+Automated follow-up reminder if no response within X days (you set the threshold)
+When a quote comes in, you mark it accepted → sub is added to the project schedule → they get their scheduling notification automatically
+Quote Request Message Template (what your subs receive)
+Hi [Sub Name],
+
+We're starting a new project and would like your quote.
+
+Job: 123 Oak Street, Lot 14
+Trade: Roofing
+Scope: Approx. 2,921 sq ft (6/12 pitch, architectural shingles)
+Plans: [Secure download link — expires in 7 days]
+Quote due: April 25, 2026
+
+Reply to this message or contact [Your Name] at [phone].
+
+Thanks,
+[Your Company Name]
+Each message is individual, addressed to the specific sub, with only their trade's details and plans. No sub sees what you sent to any other sub.
+
+For Your Developer — Key Technical Notes
+Twilio SMS API handles message delivery. Cost: negligible (~$0.008/message). Setup time: half a day.
+Plan distribution: PDFs are stored in your app's file storage (AWS S3 or similar), served via a signed URL that expires after 7 days. No email attachment size limits, no back-and-forth.
+Template engine: Store message templates in the database, with variable substitution for job name, trade, quantities, link, due date. Owner can edit templates at any time.
+Quote tracking table: Simple database table — project ID, sub ID, trade, sent timestamp, response timestamp, quoted amount, status. Drives the dashboard view above.
+Future upgrade: Add a sub-facing quote submission form — sub clicks the link, sees the plans, fills in their price and notes, and submits directly into your system. Eliminates the manual step of entering their quote. This is Phase 2.
+Revised Build Order With New Modules
+Phase	Modules	Timeline
+Phase 1	Dashboard, Pipeline, Scheduling + SMS, Sage AP sync, Time Clock	8–10 weeks
+Phase 2	Takeoff Tool (PDF.js Express), Quote Request Blast, Financials, Google Sheets migration	10–14 weeks
+Phase 3	AI Ask Anything, Knowledge Base (NBC/CEC), Wagepoint CSV export, Sub portal, Material orders	Ongoing
+The Takeoff tool and Quote Blast go in Phase 2 together because they're connected — takeoff quantities feed the quote request message automatically. Building them together means you set the measurements once and they flow through the whole system.
