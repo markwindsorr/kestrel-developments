@@ -1,5 +1,18 @@
+import { getCurrentProfile } from "@/lib/db/profiles"
 import { DashboardShell } from "@/components/layout/dashboard-shell"
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-	return <DashboardShell>{children}</DashboardShell>
+const DashboardLayout = async ({
+	children,
+}: {
+	children: React.ReactNode
+}) => {
+	const profile = await getCurrentProfile()
+
+	return (
+		<DashboardShell userName={profile.name} userRole={profile.role}>
+			{children}
+		</DashboardShell>
+	)
 }
+
+export default DashboardLayout

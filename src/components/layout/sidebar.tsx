@@ -6,14 +6,19 @@ import { usePathname } from "next/navigation"
 import { NAV_ITEMS } from "@/lib/constants"
 import { cn } from "@/lib/utils"
 import { SidebarNavItem } from "@/components/layout/sidebar-nav-item"
+import type { UserRole } from "@/lib/types"
 
 interface SidebarProps {
 	open: boolean
 	onClose: () => void
+	userRole: string
 }
 
-export function Sidebar({ open, onClose }: SidebarProps) {
+export function Sidebar({ open, onClose, userRole }: SidebarProps) {
 	const pathname = usePathname()
+	const visibleItems = NAV_ITEMS.filter(
+		(item) => !item.roles || item.roles.includes(userRole as UserRole)
+	)
 
 	return (
 		<>
@@ -57,7 +62,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
 				</div>
 
 				<nav className="flex-1 space-y-1 overflow-y-auto py-4">
-					{NAV_ITEMS.map(item => (
+					{visibleItems.map(item => (
 						<div key={item.href} onClick={onClose}>
 							<SidebarNavItem
 								item={item}

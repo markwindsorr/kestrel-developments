@@ -1,30 +1,30 @@
 import Link from "next/link"
 
-import { CURRENT_USER_ID } from "@/lib/constants"
-import { getUserById, mockJobs, mockUsers, getTimeEntriesWithDetails } from "@/lib/mock-data"
+import { getCurrentProfile, getAllProfiles } from "@/lib/db/profiles"
+import { getJobs } from "@/lib/db/jobs"
+import { getWeeklyStats } from "@/lib/db/time-entries"
 import { formatDuration } from "@/lib/utils"
 import { Card } from "@/components/ui/card"
 
-export default function DashboardPage() {
-	const user = getUserById(CURRENT_USER_ID)
-	const entries = getTimeEntriesWithDetails()
-	const activeJobs = mockJobs.filter(j => j.status === "active")
+const DashboardPage = async () => {
+	const [profile, profiles, jobs, stats] = await Promise.all([
+		getCurrentProfile(),
+		getAllProfiles(),
+		getJobs(),
+		getWeeklyStats(),
+	])
 
-	const now = new Date()
-	const monday = new Date(now)
-	const day = monday.getDay()
-	monday.setDate(monday.getDate() - day + (day === 0 ? -6 : 1))
-	monday.setHours(0, 0, 0, 0)
-
-	const weekEntries = entries.filter(e => new Date(e.clockIn) >= monday)
-	const totalMinutes = weekEntries.reduce((sum, e) => sum + (e.duration ?? 0), 0)
-	const activeCount = entries.filter(e => e.clockOut === null).length
+	const activeJobs = jobs.filter((j) => j.status === "active")
 
 	return (
 		<div>
 			<div className="mb-8">
-				<h1 className="text-2xl font-bold text-neutral-900">Welcome back, {user?.name.split(" ")[0]}</h1>
-				<p className="mt-1 text-neutral-500">Here&apos;s what&apos;s happening across your jobs this week.</p>
+				<h1 className="text-2xl font-bold text-neutral-900">
+					Welcome back, {profile.name.split(" ")[0]}
+				</h1>
+				<p className="mt-1 text-neutral-500">
+					Here&apos;s what&apos;s happening across your jobs this week.
+				</p>
 			</div>
 
 			<div className="mb-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
@@ -58,7 +58,7 @@ export default function DashboardPage() {
 							</svg>
 						</div>
 						<div>
-							<p className="text-2xl font-bold text-neutral-900">{mockUsers.length}</p>
+							<p className="text-2xl font-bold text-neutral-900">{profiles.length}</p>
 							<p className="text-sm text-neutral-500">Team Members</p>
 						</div>
 					</div>
@@ -76,7 +76,7 @@ export default function DashboardPage() {
 							</svg>
 						</div>
 						<div>
-							<p className="text-2xl font-bold text-neutral-900">{formatDuration(totalMinutes)}</p>
+							<p className="text-2xl font-bold text-neutral-900">{formatDuration(stats.totalMinutes)}</p>
 							<p className="text-sm text-neutral-500">Hours This Week</p>
 						</div>
 					</div>
@@ -94,7 +94,7 @@ export default function DashboardPage() {
 							</svg>
 						</div>
 						<div>
-							<p className="text-2xl font-bold text-neutral-900">{activeCount}</p>
+							<p className="text-2xl font-bold text-neutral-900">{stats.activeCount}</p>
 							<p className="text-sm text-neutral-500">Clocked In Now</p>
 						</div>
 					</div>
@@ -116,8 +116,23 @@ export default function DashboardPage() {
 						</svg>
 						Time Tracking
 					</Link>
+					<Link
+						href="/dashboard/jobs"
+						className="inline-flex items-center gap-2 rounded-lg bg-neutral-100 px-4 py-2.5 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-200"
+					>
+						<svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+							<path
+								strokeLinecap="round"
+								strokeLinejoin="round"
+								d="M20.25 14.15v4.25c0 1.094-.787 2.036-1.872 2.18-2.087.277-4.216.42-6.378.42s-4.291-.143-6.378-.42c-1.085-.144-1.872-1.086-1.872-2.18v-4.25m16.5 0a2.18 2.18 0 00.75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 00-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0112 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 01-.673-.38m0 0A2.18 2.18 0 013 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 013.413-.387m7.5 0V5.25A2.25 2.25 0 0013.5 3h-3a2.25 2.25 0 00-2.25 2.25v.894m7.5 0a48.667 48.667 0 00-7.5 0"
+							/>
+						</svg>
+						Jobs
+					</Link>
 				</div>
 			</Card>
 		</div>
 	)
 }
+
+export default DashboardPage
