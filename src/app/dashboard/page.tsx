@@ -1,17 +1,25 @@
 import Link from "next/link"
 
-import { getCurrentProfile, getAllProfiles } from "@/lib/db/profiles"
+import { getCurrentProfile, getOrgMembers } from "@/lib/db/profiles"
 import { getJobs } from "@/lib/db/jobs"
 import { getWeeklyStats } from "@/lib/db/time-entries"
+import { getOrgContext } from "@/lib/db/org"
 import { formatDuration } from "@/lib/utils"
 import { Card } from "@/components/ui/card"
+import { NoOrgPage } from "@/components/dashboard/no-org-page"
 
 const DashboardPage = async () => {
-	const [profile, profiles, jobs, stats] = await Promise.all([
+	const orgContext = await getOrgContext()
+
+	if (!orgContext) {
+		return <NoOrgPage />
+	}
+
+	const [profile, members, jobs, stats] = await Promise.all([
 		getCurrentProfile(),
-		getAllProfiles(),
-		getJobs(),
-		getWeeklyStats(),
+		getOrgMembers(orgContext.orgId),
+		getJobs(orgContext.orgId),
+		getWeeklyStats(orgContext.orgId),
 	])
 
 	const activeJobs = jobs.filter((j) => j.status === "active")
@@ -58,7 +66,7 @@ const DashboardPage = async () => {
 							</svg>
 						</div>
 						<div>
-							<p className="text-2xl font-bold text-neutral-900">{profiles.length}</p>
+							<p className="text-2xl font-bold text-neutral-900">{members.length}</p>
 							<p className="text-sm text-neutral-500">Team Members</p>
 						</div>
 					</div>

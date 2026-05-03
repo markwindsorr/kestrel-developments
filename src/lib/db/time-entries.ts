@@ -38,11 +38,12 @@ export const getActiveSession = async (userId: string) => {
 	}
 }
 
-export const getTimeEntriesWithDetails = async (limit = 50) => {
+export const getTimeEntriesWithDetails = async (orgId: string, limit = 50) => {
 	const supabase = await createClient()
 	const { data, error } = await supabase
 		.from("time_entries")
 		.select("*, profiles(*), jobs(*)")
+		.eq("org_id", orgId)
 		.order("clock_in", { ascending: false })
 		.limit(limit)
 
@@ -66,7 +67,6 @@ export const getTimeEntriesWithDetails = async (limit = 50) => {
 				id: entry.profiles.id,
 				name: entry.profiles.name,
 				email: entry.profiles.email,
-				role: entry.profiles.role,
 			},
 			job: {
 				id: entry.jobs.id,
@@ -81,7 +81,7 @@ export const getTimeEntriesWithDetails = async (limit = 50) => {
 	})
 }
 
-export const getWeeklyStats = async () => {
+export const getWeeklyStats = async (orgId: string) => {
 	const supabase = await createClient()
 
 	const now = new Date()
@@ -93,6 +93,7 @@ export const getWeeklyStats = async () => {
 	const { data, error } = await supabase
 		.from("time_entries")
 		.select("clock_in, clock_out")
+		.eq("org_id", orgId)
 		.gte("clock_in", monday.toISOString())
 
 	if (error) throw error
@@ -147,7 +148,6 @@ export const getTimeEntriesByJob = async (jobId: string) => {
 				id: entry.profiles.id,
 				name: entry.profiles.name,
 				email: entry.profiles.email,
-				role: entry.profiles.role,
 			},
 			duration,
 		}
@@ -169,6 +169,7 @@ export const hasActiveSession = async (userId: string): Promise<boolean> => {
 export const insertTimeEntry = async (fields: {
 	user_id: string
 	job_id: string
+	org_id: string
 	notes: string | null
 }) => {
 	const supabase = await createClient()

@@ -1,17 +1,18 @@
 import Link from "next/link"
-import { getCurrentProfile, getAllProfiles } from "@/lib/db/profiles"
 import { redirect } from "next/navigation"
+
+import { getCurrentProfile, getOrgMembers } from "@/lib/db/profiles"
+import { getOrgContext } from "@/lib/db/org"
 import { Badge } from "@/components/ui/badge"
 import { RoleSelector } from "@/components/team/role-selector"
 
 const TeamPage = async () => {
+	const orgContext = await getOrgContext()
+	if (!orgContext) redirect("/dashboard")
+	if (orgContext.role !== "admin") redirect("/dashboard")
+
 	const profile = await getCurrentProfile()
-
-	if (profile.role !== "admin") {
-		redirect("/dashboard")
-	}
-
-	const profiles = await getAllProfiles()
+	const members = await getOrgMembers(orgContext.orgId)
 
 	return (
 		<div>
@@ -51,11 +52,10 @@ const TeamPage = async () => {
 								<th className="px-6 py-3">Name</th>
 								<th className="px-6 py-3">Email</th>
 								<th className="px-6 py-3">Role</th>
-								<th className="px-6 py-3">Joined</th>
 							</tr>
 						</thead>
 						<tbody className="divide-y divide-neutral-100">
-							{profiles.map((member) => (
+							{members.map((member) => (
 								<tr key={member.id} className="hover:bg-neutral-50">
 									<td className="px-6 py-4">
 										<div className="flex items-center gap-3">
@@ -82,9 +82,6 @@ const TeamPage = async () => {
 												currentRole={member.role}
 											/>
 										)}
-									</td>
-									<td className="px-6 py-4 text-sm text-neutral-400">
-										{new Date(member.created_at).toLocaleDateString()}
 									</td>
 								</tr>
 							))}

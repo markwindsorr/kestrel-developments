@@ -5,6 +5,7 @@ export const createInvite = async (fields: {
 	role: UserRole
 	email: string | null
 	invitedBy: string
+	org_id: string
 }): Promise<DbInvite> => {
 	const supabase = await createClient()
 	const { data, error } = await supabase
@@ -13,6 +14,7 @@ export const createInvite = async (fields: {
 			role: fields.role,
 			email: fields.email || null,
 			invited_by: fields.invitedBy,
+			org_id: fields.org_id,
 		})
 		.select()
 		.single()
@@ -21,11 +23,12 @@ export const createInvite = async (fields: {
 	return data as DbInvite
 }
 
-export const getAllInvites = async (): Promise<DbInvite[]> => {
+export const getOrgInvites = async (orgId: string): Promise<DbInvite[]> => {
 	const supabase = await createClient()
 	const { data, error } = await supabase
 		.from("invites")
 		.select("*")
+		.eq("org_id", orgId)
 		.order("created_at", { ascending: false })
 
 	if (error) throw error
@@ -41,7 +44,7 @@ export const deleteInvite = async (id: string): Promise<void> => {
 
 export const validateInviteToken = async (
 	token: string
-): Promise<{ id: string; role: UserRole; email: string | null; expires_at: string } | null> => {
+): Promise<{ id: string; role: UserRole; email: string | null; expires_at: string; org_id: string } | null> => {
 	const supabase = await createClient()
 	const { data, error } = await supabase.rpc("validate_invite_token", {
 		invite_token: token,

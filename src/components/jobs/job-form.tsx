@@ -4,7 +4,18 @@ import { useActionState } from "react"
 import { createJob } from "@/app/dashboard/jobs/actions"
 import { Button } from "@/components/ui/button"
 
-export function JobForm() {
+interface Template {
+	id: string
+	name: string
+	is_default: boolean
+}
+
+interface JobFormProps {
+	templates?: Template[]
+}
+
+export const JobForm = ({ templates }: JobFormProps) => {
+	const defaultTemplate = templates?.find((t) => t.is_default)
 	const [state, formAction, pending] = useActionState(createJob, {
 		error: "",
 	})
@@ -104,6 +115,30 @@ export function JobForm() {
 					/>
 				</div>
 			</div>
+
+			{templates && templates.length > 0 && (
+				<div>
+					<label
+						htmlFor="templateId"
+						className="mb-1 block text-sm font-medium text-neutral-700"
+					>
+						Checklist Template
+					</label>
+					<select
+						id="templateId"
+						name="templateId"
+						defaultValue={defaultTemplate?.id ?? ""}
+						className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+					>
+						<option value="">No checklist</option>
+						{templates.map((t) => (
+							<option key={t.id} value={t.id}>
+								{t.name}{t.is_default ? " (Default)" : ""}
+							</option>
+						))}
+					</select>
+				</div>
+			)}
 
 			<div className="flex gap-3 pt-2">
 				<Button type="submit" variant="primary" disabled={pending}>

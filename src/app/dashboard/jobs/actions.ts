@@ -2,8 +2,6 @@
 
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
-import { CHECKLIST_TEMPLATE } from "@/lib/checklist-template"
 import { insertJob, updateJob as updateJobDb, deleteJob as deleteJobDb } from "@/lib/db/jobs"
 import {
 	getMaxSortOrder,
@@ -12,66 +10,72 @@ import {
 	toggleChecklistItem as toggleChecklistItemDb,
 	deleteChecklistItem as deleteChecklistItemDb,
 } from "@/lib/db/checklist-items"
-import { getProfileRole } from "@/lib/db/profiles"
+import { getTemplateItems } from "@/lib/db/checklist-templates"
+import { requireAuth, requireOrgContext } from "@/lib/db/org"
 
-export async function createJob(
+export const createJob = async (
 	_prevState: { error: string },
 	formData: FormData
-) {
-	const supabase = await createClient()
-	const {
-		data: { user },
-	} = await supabase.auth.getUser()
-
-	if (!user) return { error: "Not authenticated" }
-
-	const name = formData.get("name") as string
-	const address = formData.get("address") as string
-	const clientName = formData.get("clientName") as string
-	const status = formData.get("status") as string
-	const color = formData.get("color") as string
-
-	if (!name || !address || !clientName) {
-		return { error: "Name, address, and client name are required" }
-	}
-
-	let jobId: string
+) => {
 	try {
-		jobId = await insertJob({
+		const { orgContext } = await requireOrgContext()
+		if (orgContext.role !== "admin" && orgContext.role !== "foreman") {
+			return { error: "Unauthorized" }
+		}
+
+		const name = formData.get("name") as string
+		const address = formData.get("address") as string
+		const clientName = formData.get("clientName") as string
+		const status = formData.get("status") as string
+		const color = formData.get("color") as string
+
+		if (!name || !address || !clientName) {
+			return { error: "Name, address, and client name are required" }
+		}
+
+		const templateId = formData.get("templateId") as string | null
+
+		const jobId = await insertJob({
 			name,
 			address,
 			client_name: clientName,
 			status: status || "active",
 			color: color || "#2563eb",
+			org_id: orgContext.orgId,
+			template_id: templateId || null,
 		})
+
+		if (templateId) {
+			const templateItems = await getTemplateItems(templateId)
+			const checklistRows = templateItems.map((item, i) => ({
+				job_id: jobId,
+				section: item.section,
+				label: item.label,
+				sort_order: i,
+			}))
+			if (checklistRows.length > 0) {
+				await insertChecklistItems(checklistRows)
+			}
+		}
+
+		revalidatePath("/dashboard/jobs")
+		revalidatePath("/dashboard")
+		redirect(`/dashboard/jobs/${jobId}`)
 	} catch (e) {
+		if ((e as Error).message === "NEXT_REDIRECT") throw e
 		return { error: (e as Error).message }
 	}
-
-	const checklistRows = CHECKLIST_TEMPLATE.map((item, i) => ({
-		job_id: jobId,
-		section: item.section,
-		label: item.label,
-		sort_order: i,
-	}))
-
-	await insertChecklistItems(checklistRows)
-
-	revalidatePath("/dashboard/jobs")
-	revalidatePath("/dashboard")
-	redirect(`/dashboard/jobs/${jobId}`)
 }
 
-export async function updateJob(
+export const updateJob = async (
 	_prevState: { error: string },
 	formData: FormData
-) {
-	const supabase = await createClient()
-	const {
-		data: { user },
-	} = await supabase.auth.getUser()
-
-	if (!user) return { error: "Not authenticated" }
+) => {
+	try {
+		await requireAuth()
+	} catch {
+		return { error: "Not authenticated" }
+	}
 
 	const id = formData.get("id") as string
 	const name = formData.get("name") as string
@@ -98,16 +102,15 @@ export async function updateJob(
 	return { error: "" }
 }
 
-export async function addChecklistItem(
+export const addChecklistItem = async (
 	_prevState: { error: string },
 	formData: FormData
-) {
-	const supabase = await createClient()
-	const {
-		data: { user },
-	} = await supabase.auth.getUser()
-
-	if (!user) return { error: "Not authenticated" }
+) => {
+	try {
+		await requireAuth()
+	} catch {
+		return { error: "Not authenticated" }
+	}
 
 	const jobId = formData.get("jobId") as string
 	const label = formData.get("label") as string
@@ -115,7 +118,7 @@ export async function addChecklistItem(
 	if (!label?.trim()) return { error: "Item label is required" }
 
 	const maxOrder = await getMaxSortOrder(jobId)
-	const section = formData.get("section") as string || ""
+	const section = (formData.get("section") as string) || ""
 
 	try {
 		await insertChecklistItem({
@@ -132,30 +135,30 @@ export async function addChecklistItem(
 	return { error: "" }
 }
 
-export async function toggleChecklistItem(formData: FormData) {
-	const supabase = await createClient()
-	const {
-		data: { user },
-	} = await supabase.auth.getUser()
-
-	if (!user) return
+export const toggleChecklistItem = async (formData: FormData) => {
+	let userId: string
+	try {
+		userId = await requireAuth()
+	} catch {
+		return
+	}
 
 	const id = formData.get("id") as string
 	const jobId = formData.get("jobId") as string
 	const isCompleted = formData.get("isCompleted") === "true"
+	const notes = formData.get("notes") as string | null
 
-	await toggleChecklistItemDb(id, isCompleted)
+	await toggleChecklistItemDb(id, isCompleted, userId, notes)
 
 	revalidatePath(`/dashboard/jobs/${jobId}`)
 }
 
-export async function deleteChecklistItem(formData: FormData) {
-	const supabase = await createClient()
-	const {
-		data: { user },
-	} = await supabase.auth.getUser()
-
-	if (!user) return
+export const deleteChecklistItem = async (formData: FormData) => {
+	try {
+		await requireAuth()
+	} catch {
+		return
+	}
 
 	const id = formData.get("id") as string
 	const jobId = formData.get("jobId") as string
@@ -165,26 +168,24 @@ export async function deleteChecklistItem(formData: FormData) {
 	revalidatePath(`/dashboard/jobs/${jobId}`)
 }
 
-export async function deleteJob(formData: FormData) {
-	const supabase = await createClient()
-	const {
-		data: { user },
-	} = await supabase.auth.getUser()
+export const deleteJob = async (formData: FormData) => {
+	try {
+		const { orgContext } = await requireOrgContext()
+		if (orgContext.role !== "admin") return
 
-	if (!user) return
+		const id = formData.get("id") as string
+		const confirmation = formData.get("confirmation") as string
+		const jobName = formData.get("jobName") as string
 
-	const role = await getProfileRole(user.id)
-	if (role !== "admin") return
+		if (confirmation !== jobName) return
 
-	const id = formData.get("id") as string
-	const confirmation = formData.get("confirmation") as string
-	const jobName = formData.get("jobName") as string
+		await deleteJobDb(id)
 
-	if (confirmation !== jobName) return
-
-	await deleteJobDb(id)
-
-	revalidatePath("/dashboard/jobs")
-	revalidatePath("/dashboard")
-	redirect("/dashboard/jobs")
+		revalidatePath("/dashboard/jobs")
+		revalidatePath("/dashboard")
+		redirect("/dashboard/jobs")
+	} catch (e) {
+		if ((e as Error).message === "NEXT_REDIRECT") throw e
+		return
+	}
 }
