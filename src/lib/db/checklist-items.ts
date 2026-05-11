@@ -59,3 +59,21 @@ export const deleteChecklistItem = async (id: string) => {
 	const { error } = await supabase.from("job_checklist_items").delete().eq("id", id)
 	if (error) throw error
 }
+
+export async function getChecklistStatsByJobs(jobIds: string[]): Promise<Record<string, { total: number; completed: number }>> {
+	if (jobIds.length === 0) return {}
+	try {
+		const supabase = await createClient()
+		const { data } = await supabase
+			.from("job_checklist_items")
+			.select("job_id, is_completed")
+			.in("job_id", jobIds)
+		const stats: Record<string, { total: number; completed: number }> = {}
+		for (const item of data ?? []) {
+			if (!stats[item.job_id]) stats[item.job_id] = { total: 0, completed: 0 }
+			stats[item.job_id].total++
+			if (item.is_completed) stats[item.job_id].completed++
+		}
+		return stats
+	} catch { return {} }
+}

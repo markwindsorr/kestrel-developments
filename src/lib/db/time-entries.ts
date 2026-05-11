@@ -186,3 +186,22 @@ export const clockOutActiveEntry = async (userId: string) => {
 
 	if (error) throw error
 }
+
+export async function getActiveSessions(): Promise<Array<{ name: string; jobId: string; jobName: string; jobColor: string; clockIn: string }>> {
+	try {
+		const supabase = await createClient()
+		const { data, error } = await supabase
+			.from("time_entries")
+			.select("clock_in, job_id, profiles(name), jobs(name, color)")
+			.is("clock_out", null)
+			.order("clock_in", { ascending: true })
+		if (error) return []
+		return (data ?? []).map(r => ({
+			name: (r.profiles as unknown as { name: string } | null)?.name ?? "Unknown",
+			jobId: r.job_id as string,
+			jobName: (r.jobs as unknown as { name: string } | null)?.name ?? "Unknown Job",
+			jobColor: (r.jobs as unknown as { color: string } | null)?.color ?? "#666",
+			clockIn: r.clock_in as string,
+		}))
+	} catch { return [] }
+}

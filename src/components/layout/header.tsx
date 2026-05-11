@@ -1,14 +1,16 @@
 "use client"
 
 import { signOut } from "@/app/login/actions"
+import { CompanySwitcher } from "@/components/layout/company-switcher"
 
 interface HeaderProps {
 	onMenuToggle: () => void
 	userName: string
 	userRole: string
+	company: string
 }
 
-export function Header({ onMenuToggle, userName, userRole }: HeaderProps) {
+export function Header({ onMenuToggle, userName, userRole, company }: HeaderProps) {
 	return (
 		<header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-neutral-200 bg-white px-4 sm:px-6 lg:px-8">
 			<button
@@ -20,17 +22,21 @@ export function Header({ onMenuToggle, userName, userRole }: HeaderProps) {
 					<path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
 				</svg>
 			</button>
-			<div className="hidden lg:block" />
+
+			<div className="hidden lg:block">
+				<CompanySwitcher company={company} />
+			</div>
+
 			<div className="flex items-center gap-3">
+				<div className="lg:hidden">
+					<CompanySwitcher company={company} />
+				</div>
 				<div className="hidden text-right sm:block">
 					<p className="text-sm font-medium text-neutral-700">{userName}</p>
 					<p className="text-xs capitalize text-neutral-400">{userRole}</p>
 				</div>
 				<div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-600 text-sm font-medium text-white">
-					{userName
-						.split(" ")
-						.map((n) => n[0])
-						.join("")}
+					{userName.split(" ").map((n) => n[0]).join("")}
 				</div>
 				<form action={signOut}>
 					<button
