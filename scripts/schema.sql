@@ -369,10 +369,9 @@ CREATE POLICY "Admin/foreman insert checklist" ON job_checklist_items
     job_id IN (SELECT j.id FROM jobs j WHERE j.org_id = public.user_org_id())
     AND public.user_org_role() IN ('admin', 'foreman')
   );
-CREATE POLICY "Admin/foreman update checklist" ON job_checklist_items
+CREATE POLICY "Org members update checklist" ON job_checklist_items
   FOR UPDATE USING (
     job_id IN (SELECT j.id FROM jobs j WHERE j.org_id = public.user_org_id())
-    AND public.user_org_role() IN ('admin', 'foreman')
   );
 CREATE POLICY "Admin/foreman delete checklist" ON job_checklist_items
   FOR DELETE USING (

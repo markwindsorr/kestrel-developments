@@ -246,3 +246,5 @@ git add .
 git commit -m "description of changes"
 git push
 ```
+
+Change timeclock to manual entry and attach to jobs
