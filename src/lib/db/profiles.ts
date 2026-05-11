@@ -7,7 +7,12 @@ export const getCurrentProfile = async (): Promise<DbProfile> => {
 		data: { user },
 	} = await supabase.auth.getUser()
 
-	if (!user) throw new Error("Not authenticated")
+	if (!user) {
+		if (process.env.NODE_ENV === "development") {
+			return { id: "dev-user", name: "Josh Thornhill", email: "josh@kestreldevelopments.ca", avatar_url: null, created_at: new Date().toISOString() } as DbProfile
+		}
+		throw new Error("Not authenticated")
+	}
 
 	const { data, error } = await supabase
 		.from("profiles")

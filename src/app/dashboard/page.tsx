@@ -1,146 +1,215 @@
-import Link from "next/link"
+import { cookies } from "next/headers"
 
-import { getCurrentProfile, getOrgMembers } from "@/lib/db/profiles"
+import { getCurrentProfile } from "@/lib/db/profiles"
 import { getJobs } from "@/lib/db/jobs"
-import { getWeeklyStats } from "@/lib/db/time-entries"
+import { getWeeklyStats, getActiveSessions } from "@/lib/db/time-entries"
+import { getAllTradeSchedules } from "@/lib/db/trade-schedules"
+import { getAllPendingChangeOrders } from "@/lib/db/change-orders"
+import { getAllHighPriorityOpenWarranty } from "@/lib/db/warranty-items"
+import { getChecklistStatsByJobs } from "@/lib/db/checklist-items"
+import { getLeads } from "@/lib/db/leads"
 import { getOrgContext } from "@/lib/db/org"
-import { formatDuration } from "@/lib/utils"
-import { Card } from "@/components/ui/card"
-import { NoOrgPage } from "@/components/dashboard/no-org-page"
 
-const DashboardPage = async () => {
+import { WeeklyFocus } from "@/components/dashboard/weekly-focus"
+import { AttentionPanel } from "@/components/dashboard/attention-panel"
+import { WeeklySchedule } from "@/components/dashboard/weekly-schedule"
+import { JobSiteCard } from "@/components/dashboard/job-site-card"
+import { TeamActivity } from "@/components/dashboard/team-activity"
+import { NoOrgPage } from "@/components/dashboard/no-org-page"
+import { formatDuration } from "@/lib/utils"
+
+function toLocal(dateStr: string) {
+	const [y, m, d] = dateStr.split("-").map(Number)
+	return new Date(y, m - 1, d)
+}
+
+export default async function DashboardPage() {
 	const orgContext = await getOrgContext()
 
 	if (!orgContext) {
 		return <NoOrgPage />
 	}
 
-	const [profile, members, jobs, stats] = await Promise.all([
+	const cookieStore = await cookies()
+	const company = cookieStore.get("kestrel-company")?.value ?? "developments"
+
+	const [profile, allJobs, stats, allSchedules, pendingCOs, urgentWarranty, activeSessions, allLeads] = await Promise.all([
 		getCurrentProfile(),
-		getOrgMembers(orgContext.orgId),
 		getJobs(orgContext.orgId),
 		getWeeklyStats(orgContext.orgId),
+		getAllTradeSchedules(company),
+		getAllPendingChangeOrders(),
+		getAllHighPriorityOpenWarranty(),
+		getActiveSessions(),
+		getLeads(),
 	])
 
-	const activeJobs = jobs.filter((j) => j.status === "active")
+	const activeJobs = allJobs.filter(j => j.status === "active")
+	const checklistStats = await getChecklistStatsByJobs(activeJobs.map(j => j.id))
+
+	// Group crew by job
+	const crewByJob = activeSessions.reduce<Record<string, { name: string; clockIn: string }[]>>((acc, s) => {
+		if (!acc[s.jobId]) acc[s.jobId] = []
+		acc[s.jobId].push({ name: s.name, clockIn: s.clockIn })
+		return acc
+	}, {})
+
+	// Open issues (COs + warranty) by job
+	const issuesByJob: Record<string, number> = {}
+	for (const co of pendingCOs) {
+		issuesByJob[co.jobId] = (issuesByJob[co.jobId] ?? 0) + 1
+	}
+	for (const w of urgentWarranty) {
+		issuesByJob[w.jobId] = (issuesByJob[w.jobId] ?? 0) + 1
+	}
+
+	// Current / next trade phase per job
+	const today = new Date()
+	today.setHours(0, 0, 0, 0)
+
+	const phaseByJob: Record<string, { current: typeof allSchedules[0] | null; next: typeof allSchedules[0] | null }> = {}
+	for (const job of activeJobs) {
+		const jobSchedules = allSchedules
+			.filter(s => s.jobId === job.id)
+			.sort((a, b) => toLocal(a.startDate).getTime() - toLocal(b.startDate).getTime())
+
+		const current = jobSchedules.find(s => toLocal(s.startDate) <= today && toLocal(s.endDate) >= today) ?? null
+		const next = jobSchedules.find(s => toLocal(s.startDate) > today) ?? null
+		phaseByJob[job.id] = { current, next }
+	}
+
+	// Stale leads
+	const staleLeads = allLeads.filter(l => {
+		const days = (Date.now() - new Date(l.updatedAt).getTime()) / 86_400_000
+		return days > 7 && l.stage !== "won" && l.stage !== "lost"
+	})
+
+	// Schedules enriched with job info for WeeklySchedule
+	const schedulesWithJob = allSchedules.map(s => {
+		const job = allJobs.find(j => j.id === s.jobId)
+		return { ...s, jobName: job?.name ?? "Unknown", jobColor: job?.color ?? "#888" }
+	})
+
+	// Phase count this week
+	const weekStart = new Date(today)
+	weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7))
+	const weekEnd = new Date(weekStart)
+	weekEnd.setDate(weekStart.getDate() + 6)
+	const phasesThisWeek = allSchedules.filter(s => toLocal(s.startDate) <= weekEnd && toLocal(s.endDate) >= weekStart).length
+
+	const hour = new Date().getHours()
+	const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"
+	const companyLabel = company === "electrical" ? "Kestrel Electrical" : "Kestrel Developments"
+
+	// Sort jobs: crew on site first, then by name
+	const sortedJobs = [...activeJobs].sort((a, b) => {
+		const aOnSite = (crewByJob[a.id]?.length ?? 0) > 0 ? 0 : 1
+		const bOnSite = (crewByJob[b.id]?.length ?? 0) > 0 ? 0 : 1
+		return aOnSite - bOnSite
+	})
 
 	return (
-		<div>
-			<div className="mb-8">
-				<h1 className="text-2xl font-bold text-neutral-900">
-					Welcome back, {profile.name.split(" ")[0]}
+		<div className="space-y-6">
+
+			{/* ── Header ── */}
+			<div>
+				<p className="text-xs font-bold uppercase tracking-widest text-neutral-400 mb-0.5">{companyLabel}</p>
+				<h1 className="text-3xl font-bold text-neutral-900">
+					{greeting}, {profile.name.split(" ")[0]}
 				</h1>
-				<p className="mt-1 text-neutral-500">
-					Here&apos;s what&apos;s happening across your jobs this week.
+				<p className="mt-0.5 text-sm text-neutral-500">
+					{new Date().toLocaleDateString("en-CA", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
 				</p>
 			</div>
 
-			<div className="mb-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-				<Card>
-					<div className="flex items-center gap-4">
-						<div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
-							<svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-								<path
-									strokeLinecap="round"
-									strokeLinejoin="round"
-									d="M2.25 21h19.5M3.75 3v18m16.5-18v18M5.25 3h13.5M5.25 21V6.75c0-.621.504-1.125 1.125-1.125h3.375c.621 0 1.125.504 1.125 1.125V21m4.5-15v15m-1.125-15h3.375c.621 0 1.125.504 1.125 1.125v12.75"
-								/>
-							</svg>
-						</div>
-						<div>
-							<p className="text-2xl font-bold text-neutral-900">{activeJobs.length}</p>
-							<p className="text-sm text-neutral-500">Active Jobs</p>
-						</div>
-					</div>
-				</Card>
-
-				<Card>
-					<div className="flex items-center gap-4">
-						<div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-50 text-info">
-							<svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-								<path
-									strokeLinecap="round"
-									strokeLinejoin="round"
-									d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"
-								/>
-							</svg>
-						</div>
-						<div>
-							<p className="text-2xl font-bold text-neutral-900">{members.length}</p>
-							<p className="text-sm text-neutral-500">Team Members</p>
-						</div>
-					</div>
-				</Card>
-
-				<Card>
-					<div className="flex items-center gap-4">
-						<div className="flex h-12 w-12 items-center justify-center rounded-lg bg-green-50 text-success">
-							<svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-								<path
-									strokeLinecap="round"
-									strokeLinejoin="round"
-									d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"
-								/>
-							</svg>
-						</div>
-						<div>
-							<p className="text-2xl font-bold text-neutral-900">{formatDuration(stats.totalMinutes)}</p>
-							<p className="text-sm text-neutral-500">Hours This Week</p>
-						</div>
-					</div>
-				</Card>
-
-				<Card>
-					<div className="flex items-center gap-4">
-						<div className="flex h-12 w-12 items-center justify-center rounded-lg bg-yellow-50 text-warning">
-							<svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-								<path
-									strokeLinecap="round"
-									strokeLinejoin="round"
-									d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"
-								/>
-							</svg>
-						</div>
-						<div>
-							<p className="text-2xl font-bold text-neutral-900">{stats.activeCount}</p>
-							<p className="text-sm text-neutral-500">Clocked In Now</p>
-						</div>
-					</div>
-				</Card>
+			{/* ── Weekly Focus ── */}
+			<div>
+				<p className="text-xs font-bold uppercase tracking-widest text-neutral-400 mb-2">This Week&apos;s Focus</p>
+				<WeeklyFocus />
 			</div>
 
-			<Card title="Quick Actions">
-				<div className="flex flex-wrap gap-3">
-					<Link
-						href="/dashboard/time-tracking"
-						className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-700"
-					>
-						<svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-							<path
-								strokeLinecap="round"
-								strokeLinejoin="round"
-								d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"
+			{/* ── Site pulse stats ── */}
+			<div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+				<StatPill
+					label="Active Sites"
+					value={String(activeJobs.length)}
+					sub={`${allJobs.filter(j => j.status === "on-hold").length} on hold`}
+					dot="bg-brand-600"
+				/>
+				<StatPill
+					label="Crew Out Now"
+					value={String(stats.activeCount)}
+					sub={`${formatDuration(stats.totalMinutes)} logged this week`}
+					dot="bg-green-500"
+					pulse
+				/>
+				<StatPill
+					label="Phases This Week"
+					value={String(phasesThisWeek)}
+					sub={allSchedules.length > 0 ? `${allSchedules.length} total scheduled` : "None scheduled"}
+					dot="bg-blue-500"
+				/>
+				<StatPill
+					label="Open Issues"
+					value={String(pendingCOs.length + urgentWarranty.length)}
+					sub={staleLeads.length > 0 ? `+ ${staleLeads.length} stale leads` : "Sales on track"}
+					dot={pendingCOs.length + urgentWarranty.length > 0 ? "bg-amber-400" : "bg-neutral-300"}
+				/>
+			</div>
+
+			{/* ── Job Sites ── */}
+			<div>
+				<p className="text-xs font-bold uppercase tracking-widest text-neutral-400 mb-3">Job Sites</p>
+				{sortedJobs.length === 0 ? (
+					<div className="rounded-xl border border-neutral-200 bg-white p-10 text-center">
+						<p className="text-sm text-neutral-400">No active jobs — <a href="/dashboard/jobs/new" className="text-brand-600 hover:underline">create one</a></p>
+					</div>
+				) : (
+					<div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+						{sortedJobs.map(job => (
+							<JobSiteCard
+								key={job.id}
+								job={job}
+								total={checklistStats[job.id]?.total ?? 0}
+								completed={checklistStats[job.id]?.completed ?? 0}
+								crew={crewByJob[job.id] ?? []}
+								currentPhase={phaseByJob[job.id]?.current ?? null}
+								nextPhase={phaseByJob[job.id]?.next ?? null}
+								openIssues={issuesByJob[job.id] ?? 0}
 							/>
-						</svg>
-						Time Tracking
-					</Link>
-					<Link
-						href="/dashboard/jobs"
-						className="inline-flex items-center gap-2 rounded-lg bg-neutral-100 px-4 py-2.5 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-200"
-					>
-						<svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-							<path
-								strokeLinecap="round"
-								strokeLinejoin="round"
-								d="M20.25 14.15v4.25c0 1.094-.787 2.036-1.872 2.18-2.087.277-4.216.42-6.378.42s-4.291-.143-6.378-.42c-1.085-.144-1.872-1.086-1.872-2.18v-4.25m16.5 0a2.18 2.18 0 00.75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 00-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0112 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 01-.673-.38m0 0A2.18 2.18 0 013 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 013.413-.387m7.5 0V5.25A2.25 2.25 0 0013.5 3h-3a2.25 2.25 0 00-2.25 2.25v.894m7.5 0a48.667 48.667 0 00-7.5 0"
-							/>
-						</svg>
-						Jobs
-					</Link>
-				</div>
-			</Card>
+						))}
+					</div>
+				)}
+			</div>
+
+			{/* ── Schedule + Attention ── */}
+			<div className="grid gap-6 xl:grid-cols-2">
+				<WeeklySchedule schedules={schedulesWithJob} />
+				<AttentionPanel
+					pendingCOs={pendingCOs}
+					urgentWarranty={urgentWarranty}
+					staleLeads={staleLeads}
+				/>
+			</div>
+
+			{/* ── Team Activity ── */}
+			<TeamActivity sessions={activeSessions} weeklyMinutes={stats.totalMinutes} />
+
 		</div>
 	)
 }
 
-export default DashboardPage
+function StatPill({ label, value, sub, dot, pulse }: {
+	label: string; value: string; sub?: string; dot: string; pulse?: boolean
+}) {
+	return (
+		<div className="rounded-xl border border-neutral-200 bg-white px-4 py-3.5">
+			<div className="flex items-center gap-2 mb-1">
+				<span className={`h-2 w-2 rounded-full shrink-0 ${dot} ${pulse ? "animate-pulse" : ""}`} />
+				<p className="text-xs font-medium text-neutral-500">{label}</p>
+			</div>
+			<p className="text-2xl font-bold text-neutral-900 tabular-nums">{value}</p>
+			{sub && <p className="text-xs text-neutral-400 mt-0.5">{sub}</p>}
+		</div>
+	)
+}
