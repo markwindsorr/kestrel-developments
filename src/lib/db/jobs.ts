@@ -1,9 +1,13 @@
 import { createClient } from "@/lib/supabase/server"
 import type { DbJob, JobStatus } from "@/lib/types"
 
-export const getJobs = async (status?: JobStatus): Promise<DbJob[]> => {
+export const getJobs = async (orgId: string, status?: JobStatus): Promise<DbJob[]> => {
 	const supabase = await createClient()
-	let query = supabase.from("jobs").select("*").order("created_at", { ascending: false })
+	let query = supabase
+		.from("jobs")
+		.select("*")
+		.eq("org_id", orgId)
+		.order("created_at", { ascending: false })
 
 	if (status) {
 		query = query.eq("status", status)
@@ -32,6 +36,8 @@ export const insertJob = async (fields: {
 	client_name: string
 	status: string
 	color: string
+	org_id: string
+	template_id?: string | null
 }): Promise<string> => {
 	const supabase = await createClient()
 	const { data, error } = await supabase

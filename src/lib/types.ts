@@ -4,8 +4,11 @@ export interface User {
 	id: string
 	name: string
 	email: string
-	role: UserRole
 	avatarUrl?: string
+}
+
+export interface OrgMember extends User {
+	role: UserRole
 }
 
 export type JobStatus = "active" | "on-hold" | "completed"
@@ -48,17 +51,33 @@ export interface NavItem {
 }
 
 // Database row types (match Supabase schema)
+
+export interface DbOrganization {
+	id: string
+	name: string
+	created_by: string
+	created_at: string
+}
+
+export interface DbOrgMembership {
+	id: string
+	org_id: string
+	user_id: string
+	role: UserRole
+	created_at: string
+}
+
 export interface DbProfile {
 	id: string
 	name: string
 	email: string
-	role: UserRole
 	avatar_url: string | null
 	created_at: string
 }
 
 export interface DbJob {
 	id: string
+	org_id: string
 	name: string
 	address: string
 	status: JobStatus
@@ -73,17 +92,39 @@ export interface DbChecklistItem {
 	section: string
 	label: string
 	is_completed: boolean
+	completed_at: string | null
+	completed_by: string | null
+	notes: string | null
 	sort_order: number
 	created_at: string
 }
 
 export interface DbTimeEntry {
 	id: string
+	org_id: string
 	user_id: string
 	job_id: string
 	clock_in: string
 	clock_out: string | null
 	notes: string | null
+	created_at: string
+}
+
+export interface DbChecklistTemplate {
+	id: string
+	org_id: string
+	name: string
+	is_default: boolean
+	created_by: string
+	created_at: string
+}
+
+export interface DbChecklistTemplateItem {
+	id: string
+	template_id: string
+	section: string
+	label: string
+	sort_order: number
 	created_at: string
 }
 
@@ -94,6 +135,7 @@ export interface DbInvite {
 	token: string
 	role: UserRole
 	email: string | null
+	org_id: string
 	invited_by: string
 	used_by: string | null
 	used_at: string | null
@@ -106,6 +148,7 @@ export interface Invite {
 	token: string
 	role: UserRole
 	email: string | null
+	orgId: string
 	invitedBy: string
 	usedBy: string | null
 	usedAt: string | null

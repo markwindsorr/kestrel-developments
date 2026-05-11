@@ -1,27 +1,24 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { createClient } from "@/lib/supabase/server"
 import type { UserRole } from "@/lib/types"
-import { getProfileRole, updateProfileRole } from "@/lib/db/profiles"
+import { requireOrgContext } from "@/lib/db/org"
+import { updateMemberRole } from "@/lib/db/profiles"
 
-export async function updateUserRole(formData: FormData) {
-	const supabase = await createClient()
-	const {
-		data: { user },
-	} = await supabase.auth.getUser()
+export const updateUserRole = async (formData: FormData) => {
+	try {
+		const { orgContext } = await requireOrgContext()
+		if (orgContext.role !== "admin") return
 
-	if (!user) return
+		const userId = formData.get("userId") as string
+		const role = formData.get("role") as string
 
-	const currentRole = await getProfileRole(user.id)
-	if (currentRole !== "admin") return
+		if (!["admin", "foreman", "worker"].includes(role)) return
 
-	const userId = formData.get("userId") as string
-	const role = formData.get("role") as string
+		await updateMemberRole(orgContext.orgId, userId, role as UserRole)
 
-	if (!["admin", "foreman", "worker"].includes(role)) return
-
-	await updateProfileRole(userId, role as UserRole)
-
-	revalidatePath("/dashboard/team")
+		revalidatePath("/dashboard/team")
+	} catch {
+		return
+	}
 }

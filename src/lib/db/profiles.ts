@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
-import type { DbProfile, UserRole } from "@/lib/types"
+import type { DbProfile, OrgMember, UserRole } from "@/lib/types"
 
 export const getCurrentProfile = async (): Promise<DbProfile> => {
 	const supabase = await createClient()
@@ -24,34 +24,35 @@ export const getCurrentProfile = async (): Promise<DbProfile> => {
 	return data as DbProfile
 }
 
-export const getAllProfiles = async (): Promise<DbProfile[]> => {
+export const getOrgMembers = async (orgId: string): Promise<OrgMember[]> => {
 	const supabase = await createClient()
 	const { data, error } = await supabase
-		.from("profiles")
-		.select("*")
-		.order("name")
+		.from("org_memberships")
+		.select("role, profiles(*)")
+		.eq("org_id", orgId)
 
 	if (error) throw error
-	return data as DbProfile[]
+
+	return (data as unknown as { role: UserRole; profiles: DbProfile }[]).map((m) => ({
+		id: m.profiles.id,
+		name: m.profiles.name,
+		email: m.profiles.email,
+		avatarUrl: m.profiles.avatar_url ?? undefined,
+		role: m.role,
+	}))
 }
 
-export const getProfileRole = async (userId: string): Promise<UserRole | null> => {
-	const supabase = await createClient()
-	const { data } = await supabase
-		.from("profiles")
-		.select("role")
-		.eq("id", userId)
-		.single()
-
-	return data?.role ?? null
-}
-
-export const updateProfileRole = async (userId: string, role: UserRole) => {
+export const updateMemberRole = async (
+	orgId: string,
+	userId: string,
+	role: UserRole
+) => {
 	const supabase = await createClient()
 	const { error } = await supabase
-		.from("profiles")
+		.from("org_memberships")
 		.update({ role })
-		.eq("id", userId)
+		.eq("org_id", orgId)
+		.eq("user_id", userId)
 
 	if (error) throw error
 }

@@ -1,18 +1,19 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { getCurrentProfile } from "@/lib/db/profiles"
-import { getAllInvites } from "@/lib/db/invites"
+
+import { getOrgInvites } from "@/lib/db/invites"
+import { getOrgContext } from "@/lib/db/org"
 import { InviteForm } from "@/components/team/invite-form"
 import { InviteTable } from "@/components/team/invite-table"
 
 export default async function InvitesPage() {
-	const profile = await getCurrentProfile()
-
-	if (profile.role !== "admin" && profile.role !== "foreman") {
+	const orgContext = await getOrgContext()
+	if (!orgContext) redirect("/dashboard")
+	if (orgContext.role !== "admin" && orgContext.role !== "foreman") {
 		redirect("/dashboard")
 	}
 
-	const invites = await getAllInvites()
+	const invites = await getOrgInvites(orgContext.orgId)
 
 	return (
 		<div>

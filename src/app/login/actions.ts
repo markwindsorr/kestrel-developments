@@ -3,10 +3,10 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 
-export async function login(
+export const login = async (
 	_prevState: { error: string },
 	formData: FormData
-) {
+) => {
 	const supabase = await createClient()
 
 	const { error } = await supabase.auth.signInWithPassword({
@@ -21,10 +21,10 @@ export async function login(
 	redirect("/dashboard")
 }
 
-export async function signup(
+export const signup = async (
 	_prevState: { error: string },
 	formData: FormData
-) {
+) => {
 	const supabase = await createClient()
 
 	const name = formData.get("name") as string
@@ -43,10 +43,7 @@ export async function signup(
 		email,
 		password,
 		options: {
-			data: {
-				name,
-				role: "worker",
-			},
+			data: { name },
 		},
 	})
 
@@ -57,7 +54,7 @@ export async function signup(
 	redirect("/dashboard")
 }
 
-export async function signOut() {
+export const signOut = async () => {
 	const supabase = await createClient()
 	await supabase.auth.signOut()
 	redirect("/login")

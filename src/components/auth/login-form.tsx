@@ -5,7 +5,7 @@ import { login, signup } from "@/app/login/actions"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 
-export function LoginForm() {
+export const LoginForm = () => {
 	const [mode, setMode] = useState<"login" | "signup">("login")
 	const [loginState, loginAction, loginPending] = useActionState(login, {
 		error: "",
@@ -17,7 +17,7 @@ export function LoginForm() {
 	const state = mode === "login" ? loginState : signupState
 	const pending = mode === "login" ? loginPending : signupPending
 
-	async function handleGoogleSignIn() {
+	const handleGoogleSignIn = async () => {
 		const supabase = createClient()
 		await supabase.auth.signInWithOAuth({
 			provider: "google",

@@ -36,10 +36,7 @@ export const signupWithInvite = async (
 		email,
 		password,
 		options: {
-			data: {
-				name,
-				role: invite.role,
-			},
+			data: { name },
 		},
 	})
 

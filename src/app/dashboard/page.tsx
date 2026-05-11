@@ -8,12 +8,14 @@ import { getAllPendingChangeOrders } from "@/lib/db/change-orders"
 import { getAllHighPriorityOpenWarranty } from "@/lib/db/warranty-items"
 import { getChecklistStatsByJobs } from "@/lib/db/checklist-items"
 import { getLeads } from "@/lib/db/leads"
+import { getOrgContext } from "@/lib/db/org"
 
 import { WeeklyFocus } from "@/components/dashboard/weekly-focus"
 import { AttentionPanel } from "@/components/dashboard/attention-panel"
 import { WeeklySchedule } from "@/components/dashboard/weekly-schedule"
 import { JobSiteCard } from "@/components/dashboard/job-site-card"
 import { TeamActivity } from "@/components/dashboard/team-activity"
+import { NoOrgPage } from "@/components/dashboard/no-org-page"
 import { formatDuration } from "@/lib/utils"
 
 function toLocal(dateStr: string) {
@@ -22,13 +24,19 @@ function toLocal(dateStr: string) {
 }
 
 export default async function DashboardPage() {
+	const orgContext = await getOrgContext()
+
+	if (!orgContext) {
+		return <NoOrgPage />
+	}
+
 	const cookieStore = await cookies()
 	const company = cookieStore.get("kestrel-company")?.value ?? "developments"
 
 	const [profile, allJobs, stats, allSchedules, pendingCOs, urgentWarranty, activeSessions, allLeads] = await Promise.all([
 		getCurrentProfile(),
-		getJobs(),
-		getWeeklyStats(),
+		getJobs(orgContext.orgId),
+		getWeeklyStats(orgContext.orgId),
 		getAllTradeSchedules(company),
 		getAllPendingChangeOrders(),
 		getAllHighPriorityOpenWarranty(),
@@ -149,7 +157,7 @@ export default async function DashboardPage() {
 				/>
 			</div>
 
-			{/* ── Weekly Focus ── */}
+			{/* ── Job Sites ── */}
 			<div>
 				<p className="text-xs font-bold uppercase tracking-widest text-neutral-400 mb-3">Job Sites</p>
 				{sortedJobs.length === 0 ? (

@@ -1,16 +1,19 @@
 "use server"
 
+import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
 import { insertAPItem, markAPItemPaid, deleteAPItem } from "@/lib/db/ap-items"
 import { insertTradeSchedule, updateTradeSchedule, deleteTradeSchedule, addDependency, removeDependency } from "@/lib/db/trade-schedules"
 import { toggleChecklistItem } from "@/lib/db/checklist-items"
+import { requireAuth, hasOrgMembership, createOrgForAdmin } from "@/lib/db/org"
 
-export async function completeTaskAction(id: string): Promise<void> {
-	await toggleChecklistItem(id, false)
+export const completeTaskAction = async (id: string): Promise<void> => {
+	const userId = await requireAuth()
+	await toggleChecklistItem(id, false, userId)
 	revalidatePath("/dashboard")
 }
 
-export async function addAPItemAction(formData: FormData): Promise<void> {
+export const addAPItemAction = async (formData: FormData): Promise<void> => {
 	const vendor = formData.get("vendor") as string
 	const description = formData.get("description") as string | null
 	const amount = parseFloat(formData.get("amount") as string)
@@ -21,17 +24,17 @@ export async function addAPItemAction(formData: FormData): Promise<void> {
 	revalidatePath("/dashboard")
 }
 
-export async function markAPPaidAction(id: string): Promise<void> {
+export const markAPPaidAction = async (id: string): Promise<void> => {
 	await markAPItemPaid(id)
 	revalidatePath("/dashboard")
 }
 
-export async function deleteAPItemAction(id: string): Promise<void> {
+export const deleteAPItemAction = async (id: string): Promise<void> => {
 	await deleteAPItem(id)
 	revalidatePath("/dashboard")
 }
 
-export async function addTradeScheduleAction(formData: FormData): Promise<void> {
+export const addTradeScheduleAction = async (formData: FormData): Promise<void> => {
 	const jobId = formData.get("jobId") as string
 	const trade = formData.get("trade") as string
 	const contractorName = formData.get("contractorName") as string | null
@@ -51,24 +54,52 @@ export async function addTradeScheduleAction(formData: FormData): Promise<void> 
 	revalidatePath(`/dashboard/jobs/${jobId}`)
 }
 
-export async function updateTradeScheduleAction(id: string, startDate: string, endDate: string): Promise<void> {
+export const updateTradeScheduleAction = async (id: string, startDate: string, endDate: string): Promise<void> => {
 	await updateTradeSchedule(id, startDate, endDate)
 	revalidatePath("/dashboard")
 }
 
-export async function deleteTradeScheduleAction(id: string, jobId: string): Promise<void> {
+export const deleteTradeScheduleAction = async (id: string, jobId: string): Promise<void> => {
 	await deleteTradeSchedule(id)
 	revalidatePath("/dashboard")
 	revalidatePath(`/dashboard/jobs/${jobId}`)
 }
 
-export async function addDependencyAction(fromId: string, toId: string): Promise<{ id: string }> {
+export const addDependencyAction = async (fromId: string, toId: string): Promise<{ id: string }> => {
 	const id = await addDependency(fromId, toId)
 	revalidatePath("/dashboard")
 	return { id }
 }
 
-export async function removeDependencyAction(id: string): Promise<void> {
+export const removeDependencyAction = async (id: string): Promise<void> => {
 	await removeDependency(id)
 	revalidatePath("/dashboard")
+}
+
+export const createOrganization = async (
+	_prevState: { error: string },
+	formData: FormData
+) => {
+	let userId: string
+	try {
+		userId = await requireAuth()
+	} catch {
+		return { error: "Not authenticated" }
+	}
+
+	const name = (formData.get("orgName") as string)?.trim()
+	if (!name) return { error: "Organization name is required" }
+
+	if (await hasOrgMembership(userId)) {
+		return { error: "You are already part of an organization" }
+	}
+
+	try {
+		await createOrgForAdmin(name, userId)
+	} catch (e) {
+		return { error: (e as Error).message }
+	}
+
+	revalidatePath("/dashboard")
+	redirect("/dashboard")
 }

@@ -1,7 +1,8 @@
 import Link from "next/link"
+import { redirect } from "next/navigation"
 
 import { getJobs } from "@/lib/db/jobs"
-import { getCurrentProfile } from "@/lib/db/profiles"
+import { getOrgContext } from "@/lib/db/org"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 
@@ -10,12 +11,15 @@ export default async function JobsPage({
 }: {
 	searchParams: Promise<{ status?: string }>
 }) {
+	const orgContext = await getOrgContext()
+	if (!orgContext) redirect("/dashboard")
+
 	const { status } = await searchParams
-	const profile = await getCurrentProfile()
 	const jobs = await getJobs(
+		orgContext.orgId,
 		status as "active" | "on-hold" | "completed" | undefined
 	)
-	const canCreate = profile.role === "admin" || profile.role === "foreman"
+	const canCreate = orgContext.role === "admin" || orgContext.role === "foreman"
 
 	return (
 		<div>

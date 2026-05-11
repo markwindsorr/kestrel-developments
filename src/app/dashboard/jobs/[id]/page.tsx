@@ -1,9 +1,11 @@
 import Link from "next/link"
+import { redirect } from "next/navigation"
 
 import { getJobById } from "@/lib/db/jobs"
 import { getChecklistItems } from "@/lib/db/checklist-items"
 import { getTimeEntriesByJob } from "@/lib/db/time-entries"
-import { getCurrentProfile } from "@/lib/db/profiles"
+import { getOrgContext } from "@/lib/db/org"
+import { getOrgMembers } from "@/lib/db/profiles"
 import { getEstimatesForJob } from "@/lib/db/estimates"
 import { getTradeSchedulesForJob, getAllDependencies } from "@/lib/db/trade-schedules"
 import { getChangeOrders } from "@/lib/db/change-orders"
@@ -32,14 +34,17 @@ export default async function JobDetailPage({
 	params: Promise<{ id: string }>
 	searchParams: Promise<{ tab?: string }>
 }) {
+	const orgContext = await getOrgContext()
+	if (!orgContext) redirect("/dashboard")
+
 	const { id } = await params
 	const { tab = "overview" } = await searchParams
 
-	const [job, checklist, timeEntries, profile, estimates, tradeSchedules, allDeps, changeOrders, selections, warrantyItems, rawDocuments, rawPhotos] = await Promise.all([
+	const [job, checklist, timeEntries, members, estimates, tradeSchedules, allDeps, changeOrders, selections, warrantyItems, rawDocuments, rawPhotos] = await Promise.all([
 		getJobById(id),
 		getChecklistItems(id),
 		getTimeEntriesByJob(id),
-		getCurrentProfile(),
+		getOrgMembers(orgContext.orgId),
 		getEstimatesForJob(id),
 		getTradeSchedulesForJob(id),
 		getAllDependencies(),
@@ -55,7 +60,12 @@ export default async function JobDetailPage({
 		getSignedPhotoUrls(rawPhotos),
 	])
 
-	const canEdit = profile.role === "admin" || profile.role === "foreman"
+	const memberNames: Record<string, string> = {}
+	for (const m of members) {
+		memberNames[m.id] = m.name
+	}
+
+	const canEdit = orgContext.role === "admin" || orgContext.role === "foreman"
 	const totalMinutes = timeEntries.reduce((sum, e) => sum + (e.duration ?? 0), 0)
 
 	const ganttSchedules = tradeSchedules.map(s => ({
@@ -104,7 +114,7 @@ export default async function JobDetailPage({
 					<span className="text-neutral-300">|</span>
 					<p className="text-sm text-neutral-400">Client: {job.client_name}</p>
 				</div>
-				{profile.role === "admin" && (
+				{orgContext.role === "admin" && (
 					<div className="mt-4">
 						<DeleteJobButton jobId={id} jobName={job.name} />
 					</div>
@@ -160,7 +170,7 @@ export default async function JobDetailPage({
 
 					<div className="grid gap-6 lg:grid-cols-3">
 						<div className="lg:col-span-2">
-							<Checklist items={checklist} jobId={id} canEdit={canEdit} />
+							<Checklist items={checklist} jobId={id} canEdit={canEdit} memberNames={memberNames} />
 						</div>
 						<Card title="Recent Time Entries">
 							{timeEntries.length === 0 ? (

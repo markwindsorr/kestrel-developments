@@ -44,14 +44,37 @@ export const insertChecklistItems = async (
 	if (error) throw error
 }
 
-export const toggleChecklistItem = async (id: string, currentlyCompleted: boolean) => {
+export const toggleChecklistItem = async (
+	id: string,
+	currentlyCompleted: boolean,
+	userId: string,
+	notes?: string | null
+) => {
 	const supabase = await createClient()
+	const nowCompleting = !currentlyCompleted
 	const { error } = await supabase
 		.from("job_checklist_items")
-		.update({ is_completed: !currentlyCompleted })
+		.update({
+			is_completed: nowCompleting,
+			completed_at: nowCompleting ? new Date().toISOString() : null,
+			completed_by: nowCompleting ? userId : null,
+			notes: nowCompleting ? (notes || null) : null,
+		})
 		.eq("id", id)
 
 	if (error) throw error
+}
+
+export const getChecklistItemById = async (id: string): Promise<DbChecklistItem> => {
+	const supabase = await createClient()
+	const { data, error } = await supabase
+		.from("job_checklist_items")
+		.select("*")
+		.eq("id", id)
+		.single()
+
+	if (error) throw error
+	return data as DbChecklistItem
 }
 
 export const deleteChecklistItem = async (id: string) => {

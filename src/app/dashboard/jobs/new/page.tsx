@@ -1,6 +1,15 @@
+import { redirect } from "next/navigation"
+
+import { getOrgContext } from "@/lib/db/org"
+import { getTemplates } from "@/lib/db/checklist-templates"
 import { JobForm } from "@/components/jobs/job-form"
 
-export default function NewJobPage() {
+export default async function NewJobPage() {
+	const orgContext = await getOrgContext()
+	if (!orgContext) redirect("/dashboard")
+
+	const templates = await getTemplates(orgContext.orgId)
+
 	return (
 		<div>
 			<div className="mb-8">
@@ -10,7 +19,7 @@ export default function NewJobPage() {
 				</p>
 			</div>
 			<div className="max-w-lg">
-				<JobForm />
+				<JobForm templates={templates} />
 			</div>
 		</div>
 	)
