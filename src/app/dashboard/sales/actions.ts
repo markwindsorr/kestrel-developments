@@ -5,6 +5,7 @@ import { redirect } from "next/navigation"
 import { cookies } from "next/headers"
 import { insertLead, updateLeadStage, updateLeadJobId, deleteLead, type LeadStage } from "@/lib/db/leads"
 import { insertJob } from "@/lib/db/jobs"
+import { requireOrgContext } from "@/lib/db/org"
 
 export async function addLeadAction(formData: FormData): Promise<void> {
 	const cookieStore = await cookies()
@@ -51,6 +52,7 @@ export async function deleteLeadAction(id: string): Promise<void> {
 }
 
 export async function convertToJobAction(leadId: string, formData: FormData): Promise<void> {
+	const { orgContext } = await requireOrgContext()
 	const name = formData.get("name") as string
 	const address = formData.get("address") as string
 	const clientName = formData.get("clientName") as string
@@ -64,6 +66,7 @@ export async function convertToJobAction(leadId: string, formData: FormData): Pr
 		client_name: clientName,
 		status: "active",
 		color,
+		org_id: orgContext.orgId,
 	})
 
 	await updateLeadJobId(leadId, jobId)

@@ -9,7 +9,7 @@ export const getCurrentProfile = async (): Promise<DbProfile> => {
 
 	if (!user) {
 		if (process.env.NODE_ENV === "development") {
-			return { id: "dev-user", name: "Josh Thornhill", role: "admin", email: "josh@kestreldevelopments.ca" } as DbProfile
+			return { id: "dev-user", name: "Josh Thornhill", email: "josh@kestreldevelopments.ca", avatar_url: null, created_at: new Date().toISOString() } as DbProfile
 		}
 		throw new Error("Not authenticated")
 	}
