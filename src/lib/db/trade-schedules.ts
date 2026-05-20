@@ -9,6 +9,7 @@ export interface TradeSchedule {
 	endDate: string
 	color: string
 	notes: string | null
+	progress: number
 }
 
 export interface ScheduleDependency {
@@ -27,6 +28,7 @@ const toSchedule = (r: any): TradeSchedule => ({
 	endDate: r.end_date,
 	color: r.color ?? "#8b2c2c",
 	notes: r.notes ?? null,
+	progress: typeof r.progress === "number" ? r.progress : 0,
 })
 
 export async function getTradeSchedulesForJob(jobId: string): Promise<TradeSchedule[]> {
@@ -103,6 +105,19 @@ export async function insertTradeSchedule(fields: {
 	return data.id
 }
 
+export async function updateTradeScheduleProgress(
+	id: string,
+	progress: number
+): Promise<void> {
+	const supabase = await createClient()
+	const clamped = Math.max(0, Math.min(100, Math.round(progress)))
+	const { error } = await supabase
+		.from("trade_schedules")
+		.update({ progress: clamped })
+		.eq("id", id)
+	if (error) throw error
+}
+
 export async function updateTradeSchedule(id: string, startDate: string, endDate: string): Promise<void> {
 	try {
 		const supabase = await createClient()
@@ -139,4 +154,87 @@ export async function deleteTradeSchedule(id: string): Promise<void> {
 	} catch {
 		// ignore
 	}
+}
+
+export async function getScheduleJobId(scheduleId: string): Promise<string | null> {
+	const supabase = await createClient()
+	const { data, error } = await supabase
+		.from("trade_schedules")
+		.select("job_id")
+		.eq("id", scheduleId)
+		.maybeSingle()
+	if (error || !data) return null
+	return data.job_id as string
+}
+
+export async function getDependenciesForJob(jobId: string): Promise<ScheduleDependency[]> {
+	const supabase = await createClient()
+	const { data: schedules } = await supabase
+		.from("trade_schedules")
+		.select("id")
+		.eq("job_id", jobId)
+	const ids = (schedules ?? []).map((s) => s.id as string)
+	if (ids.length === 0) return []
+	const { data } = await supabase
+		.from("trade_schedule_dependencies")
+		.select("*")
+		.in("from_id", ids)
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	return (data ?? []).map((r: any) => ({ id: r.id, fromId: r.from_id, toId: r.to_id }))
+}
+
+export async function bulkUpdateScheduleDates(
+	updates: Array<{ id: string; start_date: string; end_date: string }>
+): Promise<void> {
+	if (updates.length === 0) return
+	const supabase = await createClient()
+	await Promise.all(
+		updates.map((u) =>
+			supabase
+				.from("trade_schedules")
+				.update({ start_date: u.start_date, end_date: u.end_date })
+				.eq("id", u.id)
+		)
+	)
+}
+
+export async function deleteAllTradeSchedulesForJob(jobId: string): Promise<void> {
+	const supabase = await createClient()
+	const { error } = await supabase
+		.from("trade_schedules")
+		.delete()
+		.eq("job_id", jobId)
+	if (error) throw error
+}
+
+export async function insertTradeSchedulesBulk(
+	rows: Array<{
+		job_id: string
+		trade: string
+		contractor_name: string | null
+		start_date: string
+		end_date: string
+		color: string
+		notes: string | null
+	}>
+): Promise<Array<{ id: string; trade: string }>> {
+	if (rows.length === 0) return []
+	const supabase = await createClient()
+	const { data, error } = await supabase
+		.from("trade_schedules")
+		.insert(rows)
+		.select("id, trade")
+	if (error) throw error
+	return (data ?? []) as Array<{ id: string; trade: string }>
+}
+
+export async function insertScheduleDependenciesBulk(
+	pairs: Array<{ from_id: string; to_id: string }>
+): Promise<void> {
+	if (pairs.length === 0) return
+	const supabase = await createClient()
+	const { error } = await supabase
+		.from("trade_schedule_dependencies")
+		.insert(pairs)
+	if (error) throw error
 }

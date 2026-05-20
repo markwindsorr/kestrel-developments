@@ -248,3 +248,18 @@ git push
 ```
 
 Change timeclock to manual entry and attach to jobs
+
+
+## Branch
+
+```bash
+git branch joshs-updates
+git switch joshs-updates
+
+// do your changes here
+
+git add .
+git commit -m "what you changed"
+git push
+
+```

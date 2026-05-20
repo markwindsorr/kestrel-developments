@@ -3,7 +3,7 @@ import type { DbJob } from "@/lib/types"
 
 interface SiteSession {
 	name: string
-	clockIn: string
+	hours: number
 }
 
 interface TradePhase {
@@ -20,13 +20,6 @@ interface JobSiteCardProps {
 	currentPhase: TradePhase | null
 	nextPhase: TradePhase | null
 	openIssues: number
-}
-
-function elapsed(clockIn: string) {
-	const mins = Math.round((Date.now() - new Date(clockIn).getTime()) / 60000)
-	const h = Math.floor(mins / 60)
-	const m = mins % 60
-	return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
 
 function fmtDate(d: string) {
@@ -49,8 +42,8 @@ export function JobSiteCard({ job, total, completed, crew, currentPhase, nextPha
 				</div>
 				{onSite && (
 					<span className="flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700 shrink-0">
-						<span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-						{crew.length} on site
+						<span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+						{crew.length} today
 					</span>
 				)}
 				{openIssues > 0 && (
@@ -92,19 +85,19 @@ export function JobSiteCard({ job, total, completed, crew, currentPhase, nextPha
 					</div>
 				)}
 
-				{/* Crew */}
+				{/* Crew today */}
 				{crew.length > 0 && (
 					<div className="space-y-1">
 						{crew.map((s, i) => (
 							<div key={i} className="flex items-center justify-between">
 								<p className="text-xs font-medium text-neutral-700">{s.name}</p>
-								<p className="text-xs font-mono text-green-600">{elapsed(s.clockIn)}</p>
+								<p className="text-xs font-mono text-green-600 tabular-nums">{s.hours.toFixed(1)}h</p>
 							</div>
 						))}
 					</div>
 				)}
 				{crew.length === 0 && (
-					<p className="text-xs text-neutral-400 italic">No crew on site</p>
+					<p className="text-xs text-neutral-400 italic">No hours logged today</p>
 				)}
 			</div>
 

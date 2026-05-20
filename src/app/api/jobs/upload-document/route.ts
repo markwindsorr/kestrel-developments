@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { insertJobDocument } from "@/lib/db/job-documents"
+import { insertJobDocumentAdmin } from "@/lib/db/job-documents"
 
 const MAX_SIZE = 50 * 1024 * 1024
 const ALLOWED_TYPES = [
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
 	}
 
 	try {
-		const id = await insertJobDocument({
+		const id = await insertJobDocumentAdmin({
 			jobId,
 			name: file.name,
 			description: description || undefined,

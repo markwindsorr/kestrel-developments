@@ -38,6 +38,11 @@ export const insertJob = async (fields: {
 	color: string
 	org_id: string
 	template_id?: string | null
+	budget_days?: number | null
+	budget_hours_per_day?: number | null
+	budget_workers?: number | null
+	planned_start_date?: string | null
+	planned_end_date?: string | null
 }): Promise<string> => {
 	const supabase = await createClient()
 	const { data, error } = await supabase
@@ -58,6 +63,11 @@ export const updateJob = async (
 		client_name: string
 		status: string
 		color: string
+		budget_days?: number | null
+		budget_hours_per_day?: number | null
+		budget_workers?: number | null
+		planned_start_date?: string | null
+		planned_end_date?: string | null
 	}
 ) => {
 	const supabase = await createClient()
@@ -66,6 +76,21 @@ export const updateJob = async (
 		.update(fields)
 		.eq("id", id)
 
+	if (error) throw error
+}
+
+export const updateJobBudget = async (
+	id: string,
+	fields: {
+		budget_days: number | null
+		budget_hours_per_day: number | null
+		budget_workers: number | null
+		planned_start_date: string | null
+		planned_end_date: string | null
+	}
+) => {
+	const supabase = await createClient()
+	const { error } = await supabase.from("jobs").update(fields).eq("id", id)
 	if (error) throw error
 }
 
