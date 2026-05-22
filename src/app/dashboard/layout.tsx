@@ -1,4 +1,3 @@
-import { cookies } from "next/headers"
 import { getCurrentProfile } from "@/lib/db/profiles"
 import { getOrgContext } from "@/lib/db/org"
 import { DashboardShell } from "@/components/layout/dashboard-shell"
@@ -9,8 +8,6 @@ const DashboardLayout = async ({
 }: {
 	children: React.ReactNode
 }) => {
-	const cookieStore = await cookies()
-	const company = cookieStore.get("kestrel-company")?.value ?? "developments"
 	const profile = await getCurrentProfile()
 	const orgContext = await getOrgContext()
 
@@ -19,7 +16,7 @@ const DashboardLayout = async ({
 	}
 
 	return (
-		<DashboardShell userName={profile.name} userRole={orgContext.role} company={company}>
+		<DashboardShell userName={profile.name} userRole={orgContext.role}>
 			{children}
 		</DashboardShell>
 	)

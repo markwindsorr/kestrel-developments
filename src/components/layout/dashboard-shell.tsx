@@ -9,10 +9,9 @@ interface DashboardShellProps {
 	children: React.ReactNode
 	userName: string
 	userRole: string
-	company: string
 }
 
-export function DashboardShell({ children, userName, userRole, company }: DashboardShellProps) {
+export function DashboardShell({ children, userName, userRole }: DashboardShellProps) {
 	const [sidebarOpen, setSidebarOpen] = useState(false)
 
 	const onClose = useCallback(() => setSidebarOpen(false), [])
@@ -22,7 +21,7 @@ export function DashboardShell({ children, userName, userRole, company }: Dashbo
 		<div className="min-h-screen bg-neutral-50">
 			<Sidebar open={sidebarOpen} onClose={onClose} userRole={userRole} />
 			<div className="lg:ml-64">
-				<Header onMenuToggle={onToggle} userName={userName} userRole={userRole} company={company} />
+				<Header onMenuToggle={onToggle} userName={userName} userRole={userRole} />
 				<main className="p-4 sm:p-6 lg:p-8">{children}</main>
 			</div>
 		</div>

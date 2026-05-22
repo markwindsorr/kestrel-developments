@@ -14,7 +14,6 @@ export interface ProjectHealth {
 		slipDays: number
 	}
 	crewToday: { name: string; hours: number }[]
-	riskScore: number
 }
 
 const daysBetween = (a: string, b: string): number => {
@@ -64,14 +63,6 @@ export function buildProjectHealth(params: {
 		health = "on-track"
 	}
 
-	// Risk score: higher = needs attention sooner
-	let riskScore = 0
-	if (budget.status === "red") riskScore += 100
-	else if (budget.status === "yellow") riskScore += 40
-	if (health === "overdue") riskScore += 90
-	else if (health === "behind") riskScore += 50 + Math.min(slipDays, 40)
-	riskScore += Math.max(0, 30 - pct / 4)
-
 	return {
 		job,
 		budget,
@@ -83,6 +74,5 @@ export function buildProjectHealth(params: {
 			slipDays,
 		},
 		crewToday,
-		riskScore,
 	}
 }

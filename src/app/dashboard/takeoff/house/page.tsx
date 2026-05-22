@@ -11,7 +11,7 @@ export default async function HouseTakeoffPage({
 	searchParams: Promise<{ estimate?: string }>
 }) {
 	const orgContext = await getOrgContext()
-	if (!orgContext) redirect("/dashboard")
+	if (!orgContext || orgContext.role === "worker") redirect("/dashboard")
 
 	const { estimate } = await searchParams
 

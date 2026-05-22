@@ -56,3 +56,14 @@ export const updateMemberRole = async (
 
 	if (error) throw error
 }
+
+export const removeMember = async (orgId: string, userId: string) => {
+	const supabase = await createClient()
+	const { error } = await supabase
+		.from("org_memberships")
+		.delete()
+		.eq("org_id", orgId)
+		.eq("user_id", userId)
+
+	if (error) throw error
+}

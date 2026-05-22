@@ -7,6 +7,6 @@ export const NAV_ITEMS: NavItem[] = [
 	{ label: "Time Tracking", href: "/dashboard/time-tracking", icon: "clock", roles: ["admin", "foreman", "worker"] },
 	{ label: "Checklists", href: "/dashboard/checklists", icon: "clipboard", roles: ["admin", "foreman", "worker"] },
 	{ label: "Team", href: "/dashboard/team", icon: "users", roles: ["admin", "foreman"] },
-	{ label: "Takeoff", href: "/dashboard/takeoff", icon: "ruler", roles: ["admin"] },
+	{ label: "Takeoff", href: "/dashboard/takeoff", icon: "ruler", roles: ["admin", "foreman"] },
 	{ label: "Cost Rates", href: "/dashboard/settings/rates", icon: "settings", roles: ["admin"] },
 ]

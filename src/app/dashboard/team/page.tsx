@@ -5,6 +5,7 @@ import { getCurrentProfile, getOrgMembers } from "@/lib/db/profiles"
 import { getOrgContext } from "@/lib/db/org"
 import { Badge } from "@/components/ui/badge"
 import { RoleSelector } from "@/components/team/role-selector"
+import { RemoveMemberButton } from "@/components/team/remove-member-button"
 
 const TeamPage = async () => {
 	const orgContext = await getOrgContext()
@@ -52,6 +53,7 @@ const TeamPage = async () => {
 								<th className="px-6 py-3">Name</th>
 								<th className="px-6 py-3">Email</th>
 								<th className="px-6 py-3">Role</th>
+								<th className="px-6 py-3"></th>
 							</tr>
 						</thead>
 						<tbody className="divide-y divide-neutral-100">
@@ -80,6 +82,14 @@ const TeamPage = async () => {
 											<RoleSelector
 												userId={member.id}
 												currentRole={member.role}
+											/>
+										)}
+									</td>
+									<td className="px-6 py-4">
+										{member.id !== profile.id && (
+											<RemoveMemberButton
+												userId={member.id}
+												memberName={member.name}
 											/>
 										)}
 									</td>
