@@ -28,6 +28,7 @@ import { PlansSpecsPanel } from "@/components/jobs/plans-specs-panel"
 import { PhotosPanel } from "@/components/jobs/photos-panel"
 import { BudgetEditor } from "@/components/jobs/budget-editor"
 import { ApplyScheduleButton } from "@/components/jobs/apply-schedule-button"
+import { resolveJobTab } from "@/lib/job-tabs"
 
 export default async function JobDetailPage({
 	params,
@@ -40,7 +41,10 @@ export default async function JobDetailPage({
 	if (!orgContext) redirect("/dashboard")
 
 	const { id } = await params
-	const { tab = "overview" } = await searchParams
+	const { tab: requestedTab = "overview" } = await searchParams
+	// Resolve to a tab this role may actually view — a spoofed ?tab=warranty
+	// falls back to overview, so the guarded blocks below never render.
+	const tab = resolveJobTab(requestedTab, orgContext.role)
 
 	const [job, checklist, timeEntries, members, estimates, tradeSchedules, allDeps, changeOrders, selections, warrantyItems, rawDocuments, rawPhotos] = await Promise.all([
 		getJobById(id),
@@ -124,7 +128,7 @@ export default async function JobDetailPage({
 			</div>
 
 			{/* Tabs */}
-			<JobTabs active={tab} jobId={id} counts={tabCounts} />
+			<JobTabs active={tab} jobId={id} userRole={orgContext.role} counts={tabCounts} />
 
 			{/* ── Overview ── */}
 			{tab === "overview" && (
