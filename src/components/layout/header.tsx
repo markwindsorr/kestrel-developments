@@ -23,14 +23,18 @@ export function Header({ onMenuToggle, userName, userRole, company }: HeaderProp
 				</svg>
 			</button>
 
-			<div className="hidden lg:block">
-				<CompanySwitcher company={company} />
-			</div>
-
-			<div className="flex items-center gap-3">
-				<div className="lg:hidden">
+			{userRole !== "worker" && (
+				<div className="hidden lg:block">
 					<CompanySwitcher company={company} />
 				</div>
+			)}
+
+			<div className="ml-auto flex items-center gap-3">
+				{userRole !== "worker" && (
+					<div className="lg:hidden">
+						<CompanySwitcher company={company} />
+					</div>
+				)}
 				<div className="hidden text-right sm:block">
 					<p className="text-sm font-medium text-neutral-700">{userName}</p>
 					<p className="text-xs capitalize text-neutral-400">{userRole}</p>

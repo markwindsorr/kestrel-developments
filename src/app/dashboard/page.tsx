@@ -11,7 +11,6 @@ import { getAllTradeSchedules } from "@/lib/db/trade-schedules"
 import { getAllPendingChangeOrders } from "@/lib/db/change-orders"
 import { getAllHighPriorityOpenWarranty } from "@/lib/db/warranty-items"
 import { getChecklistStatsByJobs } from "@/lib/db/checklist-items"
-import { getLeads } from "@/lib/db/leads"
 import { getAPItems } from "@/lib/db/ap-items"
 import { getOrgContext } from "@/lib/db/org"
 import { buildProjectHealth } from "@/lib/portfolio"
@@ -20,7 +19,6 @@ import { todayIso } from "@/lib/schedule-cascade"
 import { ExecutiveKpiRow } from "@/components/dashboard/executive-kpi-row"
 import { PortfolioHealth } from "@/components/dashboard/portfolio-health"
 import { RiskRadar, type RiskItem } from "@/components/dashboard/risk-radar"
-import { PipelineSummary } from "@/components/dashboard/pipeline-summary"
 import { APDuePanel } from "@/components/dashboard/ap-due-panel"
 import { WeeklySchedule } from "@/components/dashboard/weekly-schedule"
 import { TeamActivity } from "@/components/dashboard/team-activity"
@@ -58,7 +56,6 @@ export default async function DashboardPage() {
 		pendingCOs,
 		urgentWarranty,
 		todayActivity,
-		allLeads,
 		apItems,
 	] = await Promise.all([
 		getCurrentProfile(),
@@ -68,7 +65,6 @@ export default async function DashboardPage() {
 		getAllPendingChangeOrders(),
 		getAllHighPriorityOpenWarranty(),
 		getTodayActivity(),
-		getLeads(),
 		getAPItems(company),
 	])
 
@@ -110,18 +106,6 @@ export default async function DashboardPage() {
 		)
 		.sort((a, b) => b.riskScore - a.riskScore)
 
-	// ── Financial rollups ──
-	const activeLeads = allLeads.filter(
-		(l) => l.stage !== "lost" && l.stage !== "won"
-	)
-	const pipelineValue = activeLeads.reduce(
-		(s, l) => s + (l.estimatedValue ?? 0),
-		0
-	)
-	const wonValue = allLeads
-		.filter((l) => l.stage === "won")
-		.reduce((s, l) => s + (l.estimatedValue ?? 0), 0)
-
 	const horizon = new Date()
 	horizon.setDate(horizon.getDate() + 14)
 	const horizonIso = horizon.toISOString().slice(0, 10)
@@ -144,14 +128,6 @@ export default async function DashboardPage() {
 		(p) => p.schedule.health === "behind" || p.schedule.health === "overdue"
 	).length
 
-	// ── Stale leads ──
-	const staleLeads = allLeads.filter((l) => {
-		if (l.stage === "won" || l.stage === "lost") return false
-		const days =
-			(Date.parse(today) - new Date(l.updatedAt).getTime()) / 86_400_000
-		return days > 7
-	})
-
 	const openRisks =
 		pendingCOs.length + urgentWarranty.length + overBudget + behindCount
 
@@ -162,12 +138,6 @@ export default async function DashboardPage() {
 			value: String(activeJobs.length),
 			sub: onHold > 0 ? `${onHold} on hold` : "All in motion",
 			tone: "neutral" as const,
-		},
-		{
-			label: "Pipeline Value",
-			value: fmtMoney(pipelineValue),
-			sub: `${fmtMoney(wonValue)} won this period`,
-			tone: pipelineValue > 0 ? ("good" as const) : ("neutral" as const),
 		},
 		{
 			label: "Budget Health",
@@ -265,15 +235,6 @@ export default async function DashboardPage() {
 			href: `/dashboard/jobs/${w.jobId}?tab=warranty`,
 		})
 	}
-	for (const l of staleLeads.slice(0, 5)) {
-		risks.push({
-			severity: "watch",
-			title: `Stale lead: ${l.clientName}`,
-			detail: `No movement 7+ days · ${l.stage}`,
-			href: "/dashboard/sales",
-		})
-	}
-
 	const hour = new Date().getHours()
 	const greeting =
 		hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"
@@ -322,11 +283,8 @@ export default async function DashboardPage() {
 				<RiskRadar items={risks} />
 			</div>
 
-			{/* Financial row */}
-			<div className="grid gap-6 lg:grid-cols-2">
-				<PipelineSummary leads={allLeads} company={company} />
-				<APDuePanel items={dueSoon} allItems={apItems} company={company} />
-			</div>
+			{/* AP Due */}
+			<APDuePanel items={dueSoon} allItems={apItems} company={company} />
 
 			{/* Schedule + team */}
 			<WeeklySchedule schedules={schedulesWithJob} />

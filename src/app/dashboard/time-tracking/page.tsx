@@ -58,7 +58,7 @@ export default async function TimeTrackingPage() {
 				<EntriesList entries={recentEntries} jobs={uiJobs} />
 			</div>
 
-			{canSeeOrgLog && <TimeLogTable entries={orgEntries} />}
+			{canSeeOrgLog && <TimeLogTable entries={orgEntries} jobs={uiJobs} />}
 		</div>
 	)
 }
