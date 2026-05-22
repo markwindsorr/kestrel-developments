@@ -1,6 +1,6 @@
 import { cookies } from "next/headers"
 
-import { getCurrentProfile } from "@/lib/db/profiles"
+import { getCurrentProfile, getOrgMembers } from "@/lib/db/profiles"
 import { getJobs } from "@/lib/db/jobs"
 import {
 	getWeeklyStats,
@@ -8,8 +8,6 @@ import {
 	getHoursByJob,
 } from "@/lib/db/time-entries"
 import { getAllTradeSchedules } from "@/lib/db/trade-schedules"
-import { getAllPendingChangeOrders } from "@/lib/db/change-orders"
-import { getAllHighPriorityOpenWarranty } from "@/lib/db/warranty-items"
 import { getChecklistStatsByJobs } from "@/lib/db/checklist-items"
 import { getAPItems } from "@/lib/db/ap-items"
 import { getOrgContext } from "@/lib/db/org"
@@ -18,11 +16,10 @@ import { todayIso } from "@/lib/schedule-cascade"
 
 import { ExecutiveKpiRow } from "@/components/dashboard/executive-kpi-row"
 import { PortfolioHealth } from "@/components/dashboard/portfolio-health"
-import { RiskRadar, type RiskItem } from "@/components/dashboard/risk-radar"
 import { APDuePanel } from "@/components/dashboard/ap-due-panel"
-import { WeeklySchedule } from "@/components/dashboard/weekly-schedule"
 import { TeamActivity } from "@/components/dashboard/team-activity"
 import { NoOrgPage } from "@/components/dashboard/no-org-page"
+import { AssignTaskPanel } from "@/components/dashboard/assign-task-panel"
 import { WorkerDashboard } from "@/components/dashboard/worker/worker-dashboard"
 import { SubcontractorDashboard } from "@/components/dashboard/subcontractor/subcontractor-dashboard"
 
@@ -53,19 +50,17 @@ export default async function DashboardPage() {
 		allJobs,
 		stats,
 		allSchedules,
-		pendingCOs,
-		urgentWarranty,
 		todayActivity,
 		apItems,
+		orgMembers,
 	] = await Promise.all([
 		getCurrentProfile(),
 		getJobs(orgContext.orgId),
 		getWeeklyStats(orgContext.orgId),
 		getAllTradeSchedules(company),
-		getAllPendingChangeOrders(),
-		getAllHighPriorityOpenWarranty(),
 		getTodayActivity(),
 		getAPItems(company),
+		getOrgMembers(orgContext.orgId),
 	])
 
 	const activeJobs = allJobs.filter((j) => j.status === "active")
@@ -104,7 +99,6 @@ export default async function DashboardPage() {
 				crewToday: crewByJob[job.id] ?? [],
 			})
 		)
-		.sort((a, b) => b.riskScore - a.riskScore)
 
 	const horizon = new Date()
 	horizon.setDate(horizon.getDate() + 14)
@@ -124,12 +118,6 @@ export default async function DashboardPage() {
 		(p) => p.budget.status === "red" || p.budget.status === "yellow"
 	).length
 	const overBudget = projects.filter((p) => p.budget.status === "red").length
-	const behindCount = projects.filter(
-		(p) => p.schedule.health === "behind" || p.schedule.health === "overdue"
-	).length
-
-	const openRisks =
-		pendingCOs.length + urgentWarranty.length + overBudget + behindCount
 
 	// ── KPI tiles ──
 	const kpis = [
@@ -166,89 +154,13 @@ export default async function DashboardPage() {
 			tone:
 				dueSoon.length > 0 ? ("warn" as const) : ("good" as const),
 		},
-		{
-			label: "Open Risks",
-			value: String(openRisks),
-			sub:
-				openRisks > 0
-					? `${overBudget} over budget · ${behindCount} behind`
-					: "Nothing flagged",
-			tone:
-				openRisks === 0
-					? ("good" as const)
-					: overBudget + behindCount > 0
-						? ("bad" as const)
-						: ("warn" as const),
-			accent: true,
-		},
 	]
 
-	// ── Risk radar ──
-	const risks: RiskItem[] = []
-	for (const p of projects) {
-		if (p.budget.status === "red") {
-			risks.push({
-				severity: "critical",
-				title: `${p.job.name} over budget`,
-				detail: `${p.budget.pct}% used · ${p.budget.hoursLogged.toFixed(0)}/${p.budget.budgetHours}h`,
-				href: `/dashboard/jobs/${p.job.id}`,
-			})
-		}
-		if (p.schedule.health === "overdue") {
-			risks.push({
-				severity: "critical",
-				title: `${p.job.name} overdue`,
-				detail: `Planned end passed ${p.schedule.slipDays}d ago`,
-				href: `/dashboard/jobs/${p.job.id}?tab=schedule`,
-			})
-		} else if (p.schedule.health === "behind") {
-			risks.push({
-				severity: "high",
-				title: `${p.job.name} behind schedule`,
-				detail: `Tracking ${p.schedule.slipDays}d past planned end`,
-				href: `/dashboard/jobs/${p.job.id}?tab=schedule`,
-			})
-		}
-		if (p.budget.status === "yellow") {
-			risks.push({
-				severity: "high",
-				title: `${p.job.name} budget tightening`,
-				detail: `${p.budget.pct}% of hours used`,
-				href: `/dashboard/jobs/${p.job.id}`,
-			})
-		}
-	}
-	for (const co of pendingCOs.slice(0, 5)) {
-		const abs = Math.abs(co.amount)
-		risks.push({
-			severity: "high",
-			title: `Change order pending: ${co.title}`,
-			detail: `${co.jobName} · ${co.amount >= 0 ? "+" : "−"}${fmtMoney(abs)}`,
-			href: `/dashboard/jobs/${co.jobId}?tab=change-orders`,
-		})
-	}
-	for (const w of urgentWarranty.slice(0, 5)) {
-		risks.push({
-			severity: "high",
-			title: `Warranty: ${w.title}`,
-			detail: `${w.jobName} · high priority`,
-			href: `/dashboard/jobs/${w.jobId}?tab=warranty`,
-		})
-	}
 	const hour = new Date().getHours()
 	const greeting =
 		hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"
 	const companyLabel =
 		company === "electrical" ? "Kestrel Electrical" : "Kestrel Developments"
-
-	const schedulesWithJob = allSchedules.map((s) => {
-		const job = allJobs.find((j) => j.id === s.jobId)
-		return {
-			...s,
-			jobName: job?.name ?? "Unknown",
-			jobColor: job?.color ?? "#888",
-		}
-	})
 
 	return (
 		<div className="space-y-6">
@@ -275,19 +187,19 @@ export default async function DashboardPage() {
 			{/* Executive KPIs */}
 			<ExecutiveKpiRow kpis={kpis} />
 
-			{/* Portfolio + Risk */}
-			<div className="grid gap-6 xl:grid-cols-3">
-				<div className="xl:col-span-2">
-					<PortfolioHealth projects={projects} />
-				</div>
-				<RiskRadar items={risks} />
-			</div>
+			{/* Portfolio */}
+			<PortfolioHealth projects={projects} />
 
 			{/* AP Due */}
 			<APDuePanel items={dueSoon} allItems={apItems} company={company} />
 
-			{/* Schedule + team */}
-			<WeeklySchedule schedules={schedulesWithJob} />
+			{/* Assign tasks to workers */}
+			<AssignTaskPanel
+				workers={orgMembers.filter((m) => m.role === "worker")}
+				jobs={activeJobs}
+			/>
+
+			{/* Team */}
 			<TeamActivity sessions={todayActivity} weeklyHours={stats.totalHours} />
 		</div>
 	)

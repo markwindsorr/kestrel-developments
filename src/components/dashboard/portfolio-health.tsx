@@ -29,7 +29,7 @@ export function PortfolioHealth({ projects }: { projects: ProjectHealth[] }) {
 				<div>
 					<h2 className="font-semibold text-neutral-900">Portfolio Health</h2>
 					<p className="mt-0.5 text-xs text-neutral-500">
-						{projects.length} active project{projects.length !== 1 ? "s" : ""} · sorted by risk
+						{projects.length} active project{projects.length !== 1 ? "s" : ""}
 					</p>
 				</div>
 				<Link
