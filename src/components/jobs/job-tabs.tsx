@@ -2,26 +2,24 @@
 
 import Link from "next/link"
 
-const TABS = [
-	{ key: "overview", label: "Overview" },
-	{ key: "schedule", label: "Schedule" },
-	{ key: "change-orders", label: "Change Orders" },
-	{ key: "selections", label: "Selections" },
-	{ key: "warranty", label: "Warranty" },
-	{ key: "plans-specs", label: "Plans & Specs" },
-	{ key: "photos", label: "Photos & Video" },
-]
+import { JOB_TABS } from "@/lib/job-tabs"
+import type { UserRole } from "@/lib/types"
 
 interface JobTabsProps {
 	active: string
 	jobId: string
+	userRole: UserRole
 	counts?: Partial<Record<string, number>>
 }
 
-export function JobTabs({ active, jobId, counts = {} }: JobTabsProps) {
+export function JobTabs({ active, jobId, userRole, counts = {} }: JobTabsProps) {
+	const visibleTabs = JOB_TABS.filter(
+		(tab) => !tab.roles || tab.roles.includes(userRole)
+	)
+
 	return (
 		<div className="flex gap-0 border-b border-neutral-200 mb-6 overflow-x-auto">
-			{TABS.map(tab => (
+			{visibleTabs.map(tab => (
 				<Link
 					key={tab.key}
 					href={`/dashboard/jobs/${jobId}?tab=${tab.key}`}
