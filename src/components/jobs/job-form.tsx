@@ -1,6 +1,6 @@
 "use client"
 
-import { useActionState } from "react"
+import { useActionState, useState } from "react"
 import { createJob } from "@/app/dashboard/jobs/actions"
 import { Button } from "@/components/ui/button"
 
@@ -19,6 +19,18 @@ export const JobForm = ({ templates }: JobFormProps) => {
 	const [state, formAction, pending] = useActionState(createJob, {
 		error: "",
 	})
+
+	const [budgetDays, setBudgetDays] = useState("")
+	const [budgetHoursPerDay, setBudgetHoursPerDay] = useState("8")
+	const [budgetWorkers, setBudgetWorkers] = useState("2")
+
+	const days = parseFloat(budgetDays)
+	const hpd = parseFloat(budgetHoursPerDay)
+	const workers = parseFloat(budgetWorkers)
+	const totalHours =
+		Number.isFinite(days) && Number.isFinite(hpd) && Number.isFinite(workers)
+			? days * hpd * workers
+			: null
 
 	return (
 		<form action={formAction} className="space-y-5">
@@ -115,6 +127,110 @@ export const JobForm = ({ templates }: JobFormProps) => {
 					/>
 				</div>
 			</div>
+
+			<fieldset className="rounded-lg border border-neutral-200 p-4">
+				<legend className="px-2 text-sm font-semibold text-neutral-700">
+					Budget <span className="font-normal text-neutral-400">(optional)</span>
+				</legend>
+
+				<div className="grid grid-cols-3 gap-3">
+					<div>
+						<label
+							htmlFor="budgetDays"
+							className="mb-1 block text-xs font-medium text-neutral-600"
+						>
+							Days
+						</label>
+						<input
+							id="budgetDays"
+							name="budgetDays"
+							type="number"
+							step="0.25"
+							min="0"
+							value={budgetDays}
+							onChange={(e) => setBudgetDays(e.target.value)}
+							placeholder="12.5"
+							className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+						/>
+					</div>
+					<div>
+						<label
+							htmlFor="budgetHoursPerDay"
+							className="mb-1 block text-xs font-medium text-neutral-600"
+						>
+							Hours / day
+						</label>
+						<input
+							id="budgetHoursPerDay"
+							name="budgetHoursPerDay"
+							type="number"
+							step="0.25"
+							min="0"
+							value={budgetHoursPerDay}
+							onChange={(e) => setBudgetHoursPerDay(e.target.value)}
+							className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+						/>
+					</div>
+					<div>
+						<label
+							htmlFor="budgetWorkers"
+							className="mb-1 block text-xs font-medium text-neutral-600"
+						>
+							Workers
+						</label>
+						<input
+							id="budgetWorkers"
+							name="budgetWorkers"
+							type="number"
+							step="1"
+							min="0"
+							value={budgetWorkers}
+							onChange={(e) => setBudgetWorkers(e.target.value)}
+							className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+						/>
+					</div>
+				</div>
+
+				<p className="mt-3 text-xs text-neutral-500">
+					Total budget:{" "}
+					<span className="font-semibold text-neutral-800 tabular-nums">
+						{totalHours !== null && totalHours > 0
+							? `${totalHours.toFixed(1)} hours`
+							: "—"}
+					</span>
+				</p>
+
+				<div className="mt-4 grid grid-cols-2 gap-3">
+					<div>
+						<label
+							htmlFor="plannedStartDate"
+							className="mb-1 block text-xs font-medium text-neutral-600"
+						>
+							Planned start
+						</label>
+						<input
+							id="plannedStartDate"
+							name="plannedStartDate"
+							type="date"
+							className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+						/>
+					</div>
+					<div>
+						<label
+							htmlFor="plannedEndDate"
+							className="mb-1 block text-xs font-medium text-neutral-600"
+						>
+							Planned end
+						</label>
+						<input
+							id="plannedEndDate"
+							name="plannedEndDate"
+							type="date"
+							className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+						/>
+					</div>
+				</div>
+			</fieldset>
 
 			{templates && templates.length > 0 && (
 				<div>

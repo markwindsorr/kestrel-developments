@@ -6,37 +6,28 @@ export interface TimeEntryRow extends DbTimeEntry {
 	jobs: DbJob
 }
 
-export const getActiveSession = async (userId: string) => {
-	const supabase = await createClient()
-	const { data, error } = await supabase
-		.from("time_entries")
-		.select("*, jobs(*)")
-		.eq("user_id", userId)
-		.is("clock_out", null)
-		.single()
-
-	if (error && error.code !== "PGRST116") throw error
-	if (!data) return null
-
-	return {
-		timeEntry: {
-			id: data.id,
-			userId: data.user_id,
-			jobId: data.job_id,
-			clockIn: data.clock_in,
-			clockOut: data.clock_out,
-			notes: data.notes,
-		},
-		job: {
-			id: data.jobs.id,
-			name: data.jobs.name,
-			address: data.jobs.address,
-			status: data.jobs.status,
-			clientName: data.jobs.client_name,
-			color: data.jobs.color,
-		},
-	}
-}
+const mapEntryWithDetails = (entry: TimeEntryRow) => ({
+	id: entry.id,
+	userId: entry.user_id,
+	jobId: entry.job_id,
+	workDate: entry.work_date,
+	hours: Number(entry.hours),
+	notes: entry.notes,
+	dailyTask: entry.daily_task,
+	user: {
+		id: entry.profiles.id,
+		name: entry.profiles.name,
+		email: entry.profiles.email,
+	},
+	job: {
+		id: entry.jobs.id,
+		name: entry.jobs.name,
+		address: entry.jobs.address,
+		status: entry.jobs.status,
+		clientName: entry.jobs.client_name,
+		color: entry.jobs.color,
+	},
+})
 
 export const getTimeEntriesWithDetails = async (orgId: string, limit = 50) => {
 	const supabase = await createClient()
@@ -44,41 +35,84 @@ export const getTimeEntriesWithDetails = async (orgId: string, limit = 50) => {
 		.from("time_entries")
 		.select("*, profiles(*), jobs(*)")
 		.eq("org_id", orgId)
-		.order("clock_in", { ascending: false })
+		.order("work_date", { ascending: false })
+		.order("created_at", { ascending: false })
 		.limit(limit)
 
 	if (error) throw error
+	return (data as TimeEntryRow[]).map(mapEntryWithDetails)
+}
 
-	return (data as TimeEntryRow[]).map((entry) => {
-		const clockIn = new Date(entry.clock_in)
-		const clockOut = entry.clock_out ? new Date(entry.clock_out) : null
-		const duration = clockOut
-			? Math.round((clockOut.getTime() - clockIn.getTime()) / 60000)
-			: null
+export const getTimeEntriesByJob = async (jobId: string) => {
+	const supabase = await createClient()
+	const { data, error } = await supabase
+		.from("time_entries")
+		.select("*, profiles(*)")
+		.eq("job_id", jobId)
+		.order("work_date", { ascending: false })
+		.limit(20)
 
-		return {
-			id: entry.id,
-			userId: entry.user_id,
-			jobId: entry.job_id,
-			clockIn: entry.clock_in,
-			clockOut: entry.clock_out,
-			notes: entry.notes,
-			user: {
-				id: entry.profiles.id,
-				name: entry.profiles.name,
-				email: entry.profiles.email,
-			},
-			job: {
-				id: entry.jobs.id,
-				name: entry.jobs.name,
-				address: entry.jobs.address,
-				status: entry.jobs.status,
-				clientName: entry.jobs.client_name,
-				color: entry.jobs.color,
-			},
-			duration,
-		}
-	})
+	if (error) throw error
+
+	return (data as (DbTimeEntry & { profiles: DbProfile })[]).map((entry) => ({
+		id: entry.id,
+		userId: entry.user_id,
+		jobId: entry.job_id,
+		workDate: entry.work_date,
+		hours: Number(entry.hours),
+		notes: entry.notes,
+		dailyTask: entry.daily_task,
+		user: {
+			id: entry.profiles.id,
+			name: entry.profiles.name,
+			email: entry.profiles.email,
+		},
+	}))
+}
+
+export const getEntriesForUserOnDate = async (
+	userId: string,
+	workDate: string
+) => {
+	const supabase = await createClient()
+	const { data, error } = await supabase
+		.from("time_entries")
+		.select("*")
+		.eq("user_id", userId)
+		.eq("work_date", workDate)
+		.order("created_at", { ascending: true })
+
+	if (error) throw error
+	return (data as DbTimeEntry[]).map((entry) => ({
+		id: entry.id,
+		jobId: entry.job_id,
+		workDate: entry.work_date,
+		hours: Number(entry.hours),
+		dailyTask: entry.daily_task,
+	}))
+}
+
+export const getEntriesForUserSince = async (
+	userId: string,
+	sinceDate: string
+) => {
+	const supabase = await createClient()
+	const { data, error } = await supabase
+		.from("time_entries")
+		.select("*")
+		.eq("user_id", userId)
+		.gte("work_date", sinceDate)
+		.order("work_date", { ascending: false })
+		.order("created_at", { ascending: false })
+
+	if (error) throw error
+	return (data as DbTimeEntry[]).map((entry) => ({
+		id: entry.id,
+		jobId: entry.job_id,
+		workDate: entry.work_date,
+		hours: Number(entry.hours),
+		dailyTask: entry.daily_task,
+	}))
 }
 
 export const getWeeklyStats = async (orgId: string) => {
@@ -88,121 +122,158 @@ export const getWeeklyStats = async (orgId: string) => {
 	const dayOfWeek = now.getDay()
 	const monday = new Date(now)
 	monday.setDate(now.getDate() - ((dayOfWeek + 6) % 7))
-	monday.setHours(0, 0, 0, 0)
+	const mondayStr = monday.toISOString().slice(0, 10)
 
 	const { data, error } = await supabase
 		.from("time_entries")
-		.select("clock_in, clock_out")
+		.select("hours, work_date, user_id")
 		.eq("org_id", orgId)
-		.gte("clock_in", monday.toISOString())
+		.gte("work_date", mondayStr)
 
 	if (error) throw error
 
-	let totalMinutes = 0
-	let activeCount = 0
-
-	for (const entry of data) {
-		if (!entry.clock_out) {
-			activeCount++
-			totalMinutes += Math.round(
-				(Date.now() - new Date(entry.clock_in).getTime()) / 60000
-			)
-		} else {
-			totalMinutes += Math.round(
-				(new Date(entry.clock_out).getTime() -
-					new Date(entry.clock_in).getTime()) /
-					60000
-			)
-		}
+	const today = new Date().toISOString().slice(0, 10)
+	let totalHours = 0
+	const todaysUsers = new Set<string>()
+	for (const entry of data ?? []) {
+		totalHours += Number(entry.hours)
+		if (entry.work_date === today) todaysUsers.add(entry.user_id)
 	}
 
-	return { totalMinutes, activeCount }
+	return {
+		totalHours: Math.round(totalHours * 10) / 10,
+		todaysUserCount: todaysUsers.size,
+	}
 }
 
-export const getTimeEntriesByJob = async (jobId: string) => {
+export const insertTimeEntries = async (
+	rows: Array<{
+		user_id: string
+		job_id: string
+		org_id: string
+		work_date: string
+		hours: number
+		daily_task: string | null
+		notes: string | null
+	}>
+) => {
+	if (rows.length === 0) return
+	const supabase = await createClient()
+	const { error } = await supabase.from("time_entries").insert(rows)
+	if (error) throw error
+}
+
+export const updateTimeEntry = async (
+	id: string,
+	fields: { job_id: string; work_date: string; hours: number; daily_task: string | null }
+) => {
+	const supabase = await createClient()
+	const { error } = await supabase.from("time_entries").update(fields).eq("id", id)
+	if (error) throw error
+}
+
+export const deleteTimeEntry = async (id: string) => {
+	const supabase = await createClient()
+	const { error } = await supabase.from("time_entries").delete().eq("id", id)
+	if (error) throw error
+}
+
+export const getHoursByJob = async (
+	orgId: string,
+	jobIds: string[]
+): Promise<Record<string, number>> => {
+	if (jobIds.length === 0) return {}
 	const supabase = await createClient()
 	const { data, error } = await supabase
 		.from("time_entries")
-		.select("*, profiles(*)")
-		.eq("job_id", jobId)
-		.order("clock_in", { ascending: false })
-		.limit(20)
+		.select("job_id, hours")
+		.eq("org_id", orgId)
+		.in("job_id", jobIds)
 
-	if (error) throw error
+	if (error) return {}
 
-	return (data as (DbTimeEntry & { profiles: DbProfile })[]).map((entry) => {
-		const clockIn = new Date(entry.clock_in)
-		const clockOut = entry.clock_out ? new Date(entry.clock_out) : null
-		const duration = clockOut
-			? Math.round((clockOut.getTime() - clockIn.getTime()) / 60000)
-			: null
-
-		return {
-			id: entry.id,
-			userId: entry.user_id,
-			jobId: entry.job_id,
-			clockIn: entry.clock_in,
-			clockOut: entry.clock_out,
-			notes: entry.notes,
-			user: {
-				id: entry.profiles.id,
-				name: entry.profiles.name,
-				email: entry.profiles.email,
-			},
-			duration,
-		}
-	})
+	const hoursByJob: Record<string, number> = {}
+	for (const row of data ?? []) {
+		hoursByJob[row.job_id] = (hoursByJob[row.job_id] ?? 0) + Number(row.hours)
+	}
+	for (const [jobId, hours] of Object.entries(hoursByJob)) {
+		hoursByJob[jobId] = Math.round(hours * 100) / 100
+	}
+	return hoursByJob
 }
 
-export const hasActiveSession = async (userId: string): Promise<boolean> => {
+export const getRecentJobsForUser = async (
+	userId: string,
+	limit = 5
+): Promise<string[]> => {
 	const supabase = await createClient()
-	const { data } = await supabase
+	const { data, error } = await supabase
 		.from("time_entries")
-		.select("id")
+		.select("job_id, work_date")
 		.eq("user_id", userId)
-		.is("clock_out", null)
-		.single()
+		.order("work_date", { ascending: false })
+		.limit(50)
 
-	return !!data
+	if (error || !data) return []
+	const seen = new Set<string>()
+	const ordered: string[] = []
+	for (const row of data) {
+		if (seen.has(row.job_id)) continue
+		seen.add(row.job_id)
+		ordered.push(row.job_id)
+		if (ordered.length >= limit) break
+	}
+	return ordered
 }
 
-export const insertTimeEntry = async (fields: {
-	user_id: string
-	job_id: string
-	org_id: string
-	notes: string | null
-}) => {
-	const supabase = await createClient()
-	const { error } = await supabase.from("time_entries").insert(fields)
-	if (error) throw error
+export interface TodayActivityRow {
+	userId: string
+	name: string
+	jobId: string
+	jobName: string
+	jobColor: string
+	hours: number
 }
 
-export const clockOutActiveEntry = async (userId: string) => {
-	const supabase = await createClient()
-	const { error } = await supabase
-		.from("time_entries")
-		.update({ clock_out: new Date().toISOString() })
-		.eq("user_id", userId)
-		.is("clock_out", null)
-
-	if (error) throw error
-}
-
-export async function getActiveSessions(): Promise<Array<{ name: string; jobId: string; jobName: string; jobColor: string; clockIn: string }>> {
+export async function getTodayActivity(): Promise<TodayActivityRow[]> {
 	try {
 		const supabase = await createClient()
+		const today = new Date().toISOString().slice(0, 10)
 		const { data, error } = await supabase
 			.from("time_entries")
-			.select("clock_in, job_id, profiles(name), jobs(name, color)")
-			.is("clock_out", null)
-			.order("clock_in", { ascending: true })
+			.select("user_id, job_id, hours, profiles(name), jobs(name, color)")
+			.eq("work_date", today)
 		if (error) return []
-		return (data ?? []).map(r => ({
-			name: (r.profiles as unknown as { name: string } | null)?.name ?? "Unknown",
+
+		const rows = (data ?? []).map((r) => ({
+			userId: r.user_id as string,
+			name:
+				(r.profiles as unknown as { name: string } | null)?.name ?? "Unknown",
 			jobId: r.job_id as string,
-			jobName: (r.jobs as unknown as { name: string } | null)?.name ?? "Unknown Job",
-			jobColor: (r.jobs as unknown as { color: string } | null)?.color ?? "#666",
-			clockIn: r.clock_in as string,
+			jobName:
+				(r.jobs as unknown as { name: string } | null)?.name ?? "Unknown Job",
+			jobColor:
+				(r.jobs as unknown as { color: string } | null)?.color ?? "#666",
+			hours: Number(r.hours),
 		}))
-	} catch { return [] }
+
+		const grouped = new Map<string, TodayActivityRow>()
+		for (const r of rows) {
+			const key = `${r.userId}|${r.jobId}`
+			const existing = grouped.get(key)
+			if (existing) {
+				existing.hours += r.hours
+			} else {
+				grouped.set(key, { ...r })
+			}
+		}
+		for (const v of grouped.values()) {
+			v.hours = Math.round(v.hours * 100) / 100
+		}
+		return Array.from(grouped.values()).sort((a, b) =>
+			a.name.localeCompare(b.name)
+		)
+	} catch {
+		return []
+	}
 }

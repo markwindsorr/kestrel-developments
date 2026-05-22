@@ -110,13 +110,14 @@ export function GanttChart({
 						name: s.contractorName ? `${s.trade} · ${s.contractorName}` : s.trade,
 						start: parseDate(s.startDate),
 						end: parseDate(s.endDate),
-						progress: 0,
+						progress: s.progress,
 						project: jobId,
 						dependencies: depsByTarget.get(s.id) ?? [],
 						styles: {
-							backgroundColor: isConflict ? "#ef4444" : s.color,
-							backgroundSelectedColor: isConflict ? "#dc2626" : s.color,
+							backgroundColor: isConflict ? "#ef4444" : s.color + "44",
+							backgroundSelectedColor: isConflict ? "#dc2626" : s.color + "66",
 							progressColor: isConflict ? "#ef4444" : s.color,
+							progressSelectedColor: isConflict ? "#dc2626" : s.color,
 						},
 					})
 				}

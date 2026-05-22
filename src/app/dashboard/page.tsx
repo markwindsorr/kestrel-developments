@@ -1,215 +1,206 @@
 import { cookies } from "next/headers"
 
-import { getCurrentProfile } from "@/lib/db/profiles"
+import { getCurrentProfile, getOrgMembers } from "@/lib/db/profiles"
 import { getJobs } from "@/lib/db/jobs"
-import { getWeeklyStats, getActiveSessions } from "@/lib/db/time-entries"
+import {
+	getWeeklyStats,
+	getTodayActivity,
+	getHoursByJob,
+} from "@/lib/db/time-entries"
 import { getAllTradeSchedules } from "@/lib/db/trade-schedules"
-import { getAllPendingChangeOrders } from "@/lib/db/change-orders"
-import { getAllHighPriorityOpenWarranty } from "@/lib/db/warranty-items"
 import { getChecklistStatsByJobs } from "@/lib/db/checklist-items"
-import { getLeads } from "@/lib/db/leads"
+import { getAPItems } from "@/lib/db/ap-items"
 import { getOrgContext } from "@/lib/db/org"
+import { buildProjectHealth } from "@/lib/portfolio"
+import { todayIso } from "@/lib/schedule-cascade"
 
-import { WeeklyFocus } from "@/components/dashboard/weekly-focus"
-import { AttentionPanel } from "@/components/dashboard/attention-panel"
-import { WeeklySchedule } from "@/components/dashboard/weekly-schedule"
-import { JobSiteCard } from "@/components/dashboard/job-site-card"
+import { ExecutiveKpiRow } from "@/components/dashboard/executive-kpi-row"
+import { PortfolioHealth } from "@/components/dashboard/portfolio-health"
+import { APDuePanel } from "@/components/dashboard/ap-due-panel"
 import { TeamActivity } from "@/components/dashboard/team-activity"
 import { NoOrgPage } from "@/components/dashboard/no-org-page"
-import { formatDuration } from "@/lib/utils"
+import { AssignTaskPanel } from "@/components/dashboard/assign-task-panel"
+import { WorkerDashboard } from "@/components/dashboard/worker/worker-dashboard"
+import { SubcontractorDashboard } from "@/components/dashboard/subcontractor/subcontractor-dashboard"
 
-function toLocal(dateStr: string) {
-	const [y, m, d] = dateStr.split("-").map(Number)
-	return new Date(y, m - 1, d)
+const fmtMoney = (n: number) => {
+	if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
+	if (n >= 1_000) return `$${Math.round(n / 1_000)}K`
+	return `$${Math.round(n).toLocaleString("en-CA")}`
 }
 
 export default async function DashboardPage() {
 	const orgContext = await getOrgContext()
+	if (!orgContext) return <NoOrgPage />
 
-	if (!orgContext) {
-		return <NoOrgPage />
+	if (orgContext.role === "worker") {
+		return <WorkerDashboard orgId={orgContext.orgId} />
+	}
+
+	if (orgContext.role === "subcontractor") {
+		return <SubcontractorDashboard orgId={orgContext.orgId} />
 	}
 
 	const cookieStore = await cookies()
 	const company = cookieStore.get("kestrel-company")?.value ?? "developments"
+	const today = todayIso()
 
-	const [profile, allJobs, stats, allSchedules, pendingCOs, urgentWarranty, activeSessions, allLeads] = await Promise.all([
+	const [
+		profile,
+		allJobs,
+		stats,
+		allSchedules,
+		todayActivity,
+		apItems,
+		orgMembers,
+	] = await Promise.all([
 		getCurrentProfile(),
 		getJobs(orgContext.orgId),
 		getWeeklyStats(orgContext.orgId),
 		getAllTradeSchedules(company),
-		getAllPendingChangeOrders(),
-		getAllHighPriorityOpenWarranty(),
-		getActiveSessions(),
-		getLeads(),
+		getTodayActivity(),
+		getAPItems(company),
+		getOrgMembers(orgContext.orgId),
 	])
 
-	const activeJobs = allJobs.filter(j => j.status === "active")
-	const checklistStats = await getChecklistStatsByJobs(activeJobs.map(j => j.id))
+	const activeJobs = allJobs.filter((j) => j.status === "active")
+	const onHold = allJobs.filter((j) => j.status === "on-hold").length
+	const jobIds = activeJobs.map((j) => j.id)
 
-	// Group crew by job
-	const crewByJob = activeSessions.reduce<Record<string, { name: string; clockIn: string }[]>>((acc, s) => {
-		if (!acc[s.jobId]) acc[s.jobId] = []
-		acc[s.jobId].push({ name: s.name, clockIn: s.clockIn })
-		return acc
-	}, {})
+	const [hoursByJob, checklistStats] = await Promise.all([
+		getHoursByJob(orgContext.orgId, jobIds),
+		getChecklistStatsByJobs(jobIds),
+	])
 
-	// Open issues (COs + warranty) by job
-	const issuesByJob: Record<string, number> = {}
-	for (const co of pendingCOs) {
-		issuesByJob[co.jobId] = (issuesByJob[co.jobId] ?? 0) + 1
-	}
-	for (const w of urgentWarranty) {
-		issuesByJob[w.jobId] = (issuesByJob[w.jobId] ?? 0) + 1
+	// Latest scheduled end date per job
+	const scheduleEndByJob: Record<string, string> = {}
+	for (const s of allSchedules) {
+		const cur = scheduleEndByJob[s.jobId]
+		if (!cur || s.endDate > cur) scheduleEndByJob[s.jobId] = s.endDate
 	}
 
-	// Current / next trade phase per job
-	const today = new Date()
-	today.setHours(0, 0, 0, 0)
-
-	const phaseByJob: Record<string, { current: typeof allSchedules[0] | null; next: typeof allSchedules[0] | null }> = {}
-	for (const job of activeJobs) {
-		const jobSchedules = allSchedules
-			.filter(s => s.jobId === job.id)
-			.sort((a, b) => toLocal(a.startDate).getTime() - toLocal(b.startDate).getTime())
-
-		const current = jobSchedules.find(s => toLocal(s.startDate) <= today && toLocal(s.endDate) >= today) ?? null
-		const next = jobSchedules.find(s => toLocal(s.startDate) > today) ?? null
-		phaseByJob[job.id] = { current, next }
+	// Crew on site today per job
+	const crewByJob: Record<string, { name: string; hours: number }[]> = {}
+	for (const a of todayActivity) {
+		;(crewByJob[a.jobId] ??= []).push({ name: a.name, hours: a.hours })
 	}
 
-	// Stale leads
-	const staleLeads = allLeads.filter(l => {
-		const days = (Date.now() - new Date(l.updatedAt).getTime()) / 86_400_000
-		return days > 7 && l.stage !== "won" && l.stage !== "lost"
-	})
+	const projects = activeJobs
+		.map((job) =>
+			buildProjectHealth({
+				job,
+				hoursLogged: hoursByJob[job.id] ?? 0,
+				checklist: {
+					total: checklistStats[job.id]?.total ?? 0,
+					completed: checklistStats[job.id]?.completed ?? 0,
+				},
+				scheduleEndDate: scheduleEndByJob[job.id] ?? null,
+				todayIso: today,
+				crewToday: crewByJob[job.id] ?? [],
+			})
+		)
 
-	// Schedules enriched with job info for WeeklySchedule
-	const schedulesWithJob = allSchedules.map(s => {
-		const job = allJobs.find(j => j.id === s.jobId)
-		return { ...s, jobName: job?.name ?? "Unknown", jobColor: job?.color ?? "#888" }
-	})
+	const horizon = new Date()
+	horizon.setDate(horizon.getDate() + 14)
+	const horizonIso = horizon.toISOString().slice(0, 10)
+	const dueSoon = apItems.filter((i) => !i.isPaid && i.dueDate <= horizonIso)
+	const dueSoonTotal = dueSoon.reduce((s, i) => s + i.amount, 0)
+	const apTotal = apItems.reduce((s, i) => s + i.amount, 0)
 
-	// Phase count this week
-	const weekStart = new Date(today)
-	weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7))
-	const weekEnd = new Date(weekStart)
-	weekEnd.setDate(weekStart.getDate() + 6)
-	const phasesThisWeek = allSchedules.filter(s => toLocal(s.startDate) <= weekEnd && toLocal(s.endDate) >= weekStart).length
+	// ── Budget rollup ──
+	const budgeted = projects.filter((p) => p.budget.status !== "unset")
+	const totalBudgetHrs = budgeted.reduce(
+		(s, p) => s + (p.budget.budgetHours ?? 0),
+		0
+	)
+	const totalLoggedHrs = budgeted.reduce((s, p) => s + p.budget.hoursLogged, 0)
+	const atRisk = projects.filter(
+		(p) => p.budget.status === "red" || p.budget.status === "yellow"
+	).length
+	const overBudget = projects.filter((p) => p.budget.status === "red").length
+
+	// ── KPI tiles ──
+	const kpis = [
+		{
+			label: "Active Projects",
+			value: String(activeJobs.length),
+			sub: onHold > 0 ? `${onHold} on hold` : "All in motion",
+			tone: "neutral" as const,
+		},
+		{
+			label: "Budget Health",
+			value: atRisk === 0 ? "On track" : `${atRisk} at risk`,
+			sub:
+				totalBudgetHrs > 0
+					? `${totalLoggedHrs.toFixed(0)}/${totalBudgetHrs.toFixed(0)}h portfolio`
+					: "No budgets set",
+			tone:
+				overBudget > 0
+					? ("bad" as const)
+					: atRisk > 0
+						? ("warn" as const)
+						: ("good" as const),
+		},
+		{
+			label: "Hours This Week",
+			value: `${stats.totalHours.toFixed(0)}h`,
+			sub: `${stats.todaysUserCount} working today`,
+			tone: "neutral" as const,
+		},
+		{
+			label: "Cash Out · 14d",
+			value: fmtMoney(dueSoonTotal),
+			sub: `${fmtMoney(apTotal)} total unpaid`,
+			tone:
+				dueSoon.length > 0 ? ("warn" as const) : ("good" as const),
+		},
+	]
 
 	const hour = new Date().getHours()
-	const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"
-	const companyLabel = company === "electrical" ? "Kestrel Electrical" : "Kestrel Developments"
-
-	// Sort jobs: crew on site first, then by name
-	const sortedJobs = [...activeJobs].sort((a, b) => {
-		const aOnSite = (crewByJob[a.id]?.length ?? 0) > 0 ? 0 : 1
-		const bOnSite = (crewByJob[b.id]?.length ?? 0) > 0 ? 0 : 1
-		return aOnSite - bOnSite
-	})
+	const greeting =
+		hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"
+	const companyLabel =
+		company === "electrical" ? "Kestrel Electrical" : "Kestrel Developments"
 
 	return (
 		<div className="space-y-6">
-
-			{/* ── Header ── */}
-			<div>
-				<p className="text-xs font-bold uppercase tracking-widest text-neutral-400 mb-0.5">{companyLabel}</p>
-				<h1 className="text-3xl font-bold text-neutral-900">
-					{greeting}, {profile.name.split(" ")[0]}
-				</h1>
-				<p className="mt-0.5 text-sm text-neutral-500">
-					{new Date().toLocaleDateString("en-CA", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+			{/* Header */}
+			<div className="flex flex-wrap items-end justify-between gap-3">
+				<div>
+					<p className="mb-0.5 text-xs font-bold uppercase tracking-widest text-brand-600">
+						{companyLabel} · Command Center
+					</p>
+					<h1 className="text-3xl font-bold text-neutral-900">
+						{greeting}, {profile.name.split(" ")[0]}
+					</h1>
+				</div>
+				<p className="text-sm text-neutral-500">
+					{new Date().toLocaleDateString("en-CA", {
+						weekday: "long",
+						year: "numeric",
+						month: "long",
+						day: "numeric",
+					})}
 				</p>
 			</div>
 
-			{/* ── Weekly Focus ── */}
-			<div>
-				<p className="text-xs font-bold uppercase tracking-widest text-neutral-400 mb-2">This Week&apos;s Focus</p>
-				<WeeklyFocus />
-			</div>
+			{/* Executive KPIs */}
+			<ExecutiveKpiRow kpis={kpis} />
 
-			{/* ── Site pulse stats ── */}
-			<div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-				<StatPill
-					label="Active Sites"
-					value={String(activeJobs.length)}
-					sub={`${allJobs.filter(j => j.status === "on-hold").length} on hold`}
-					dot="bg-brand-600"
-				/>
-				<StatPill
-					label="Crew Out Now"
-					value={String(stats.activeCount)}
-					sub={`${formatDuration(stats.totalMinutes)} logged this week`}
-					dot="bg-green-500"
-					pulse
-				/>
-				<StatPill
-					label="Phases This Week"
-					value={String(phasesThisWeek)}
-					sub={allSchedules.length > 0 ? `${allSchedules.length} total scheduled` : "None scheduled"}
-					dot="bg-blue-500"
-				/>
-				<StatPill
-					label="Open Issues"
-					value={String(pendingCOs.length + urgentWarranty.length)}
-					sub={staleLeads.length > 0 ? `+ ${staleLeads.length} stale leads` : "Sales on track"}
-					dot={pendingCOs.length + urgentWarranty.length > 0 ? "bg-amber-400" : "bg-neutral-300"}
-				/>
-			</div>
+			{/* Portfolio */}
+			<PortfolioHealth projects={projects} />
 
-			{/* ── Job Sites ── */}
-			<div>
-				<p className="text-xs font-bold uppercase tracking-widest text-neutral-400 mb-3">Job Sites</p>
-				{sortedJobs.length === 0 ? (
-					<div className="rounded-xl border border-neutral-200 bg-white p-10 text-center">
-						<p className="text-sm text-neutral-400">No active jobs — <a href="/dashboard/jobs/new" className="text-brand-600 hover:underline">create one</a></p>
-					</div>
-				) : (
-					<div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-						{sortedJobs.map(job => (
-							<JobSiteCard
-								key={job.id}
-								job={job}
-								total={checklistStats[job.id]?.total ?? 0}
-								completed={checklistStats[job.id]?.completed ?? 0}
-								crew={crewByJob[job.id] ?? []}
-								currentPhase={phaseByJob[job.id]?.current ?? null}
-								nextPhase={phaseByJob[job.id]?.next ?? null}
-								openIssues={issuesByJob[job.id] ?? 0}
-							/>
-						))}
-					</div>
-				)}
-			</div>
+			{/* AP Due */}
+			<APDuePanel items={dueSoon} allItems={apItems} company={company} />
 
-			{/* ── Schedule + Attention ── */}
-			<div className="grid gap-6 xl:grid-cols-2">
-				<WeeklySchedule schedules={schedulesWithJob} />
-				<AttentionPanel
-					pendingCOs={pendingCOs}
-					urgentWarranty={urgentWarranty}
-					staleLeads={staleLeads}
-				/>
-			</div>
+			{/* Assign tasks to workers */}
+			<AssignTaskPanel
+				workers={orgMembers.filter((m) => m.role === "worker")}
+				jobs={activeJobs}
+			/>
 
-			{/* ── Team Activity ── */}
-			<TeamActivity sessions={activeSessions} weeklyMinutes={stats.totalMinutes} />
-
-		</div>
-	)
-}
-
-function StatPill({ label, value, sub, dot, pulse }: {
-	label: string; value: string; sub?: string; dot: string; pulse?: boolean
-}) {
-	return (
-		<div className="rounded-xl border border-neutral-200 bg-white px-4 py-3.5">
-			<div className="flex items-center gap-2 mb-1">
-				<span className={`h-2 w-2 rounded-full shrink-0 ${dot} ${pulse ? "animate-pulse" : ""}`} />
-				<p className="text-xs font-medium text-neutral-500">{label}</p>
-			</div>
-			<p className="text-2xl font-bold text-neutral-900 tabular-nums">{value}</p>
-			{sub && <p className="text-xs text-neutral-400 mt-0.5">{sub}</p>}
+			{/* Team */}
+			<TeamActivity sessions={todayActivity} weeklyHours={stats.totalHours} />
 		</div>
 	)
 }

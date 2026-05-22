@@ -1,4 +1,4 @@
-export type UserRole = "admin" | "foreman" | "worker"
+export type UserRole = "admin" | "foreman" | "worker" | "subcontractor"
 
 export interface User {
 	id: string
@@ -20,27 +20,27 @@ export interface Job {
 	status: JobStatus
 	clientName: string
 	color: string
+	budgetDays?: number | null
+	budgetHoursPerDay?: number | null
+	budgetWorkers?: number | null
+	budgetHours?: number | null
+	plannedStartDate?: string | null
+	plannedEndDate?: string | null
 }
 
 export interface TimeEntry {
 	id: string
 	userId: string
 	jobId: string
-	clockIn: string
-	clockOut: string | null
+	workDate: string
+	hours: number
 	notes: string | null
+	dailyTask: string | null
 }
 
 export interface TimeEntryWithDetails extends TimeEntry {
 	user: User
 	job: Job
-	duration: number | null
-}
-
-export interface ActiveClockSession {
-	timeEntry: TimeEntry
-	job: Job
-	elapsedMinutes: number
 }
 
 export interface NavItem {
@@ -83,6 +83,12 @@ export interface DbJob {
 	status: JobStatus
 	client_name: string
 	color: string
+	budget_days: number | null
+	budget_hours_per_day: number | null
+	budget_workers: number | null
+	budget_hours_total: number | null
+	planned_start_date: string | null
+	planned_end_date: string | null
 	created_at: string
 }
 
@@ -104,10 +110,51 @@ export interface DbTimeEntry {
 	org_id: string
 	user_id: string
 	job_id: string
-	clock_in: string
+	work_date: string
+	hours: number
+	clock_in: string | null
 	clock_out: string | null
 	notes: string | null
+	daily_task: string | null
 	created_at: string
+}
+
+export interface DbTodoItem {
+	id: string
+	org_id: string
+	assignee_id: string
+	created_by: string
+	job_id: string | null
+	label: string
+	is_completed: boolean
+	completed_at: string | null
+	due_date: string | null
+	created_at: string
+}
+
+export interface TodoItem {
+	id: string
+	assigneeId: string
+	createdBy: string
+	createdByName: string
+	jobId: string | null
+	jobName: string | null
+	label: string
+	isCompleted: boolean
+	completedAt: string | null
+	dueDate: string | null
+	createdAt: string
+	source: "self" | "assigned"
+}
+
+export type BudgetStatus = "green" | "yellow" | "red" | "unset"
+
+export interface BudgetSnapshot {
+	status: BudgetStatus
+	pct: number | null
+	hoursLogged: number
+	budgetHours: number | null
+	remainingHours: number | null
 }
 
 export interface DbChecklistTemplate {

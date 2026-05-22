@@ -3,7 +3,19 @@
 import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
 import { insertAPItem, markAPItemPaid, deleteAPItem } from "@/lib/db/ap-items"
-import { insertTradeSchedule, updateTradeSchedule, deleteTradeSchedule, addDependency, removeDependency } from "@/lib/db/trade-schedules"
+import {
+	insertTradeSchedule,
+	updateTradeSchedule,
+	deleteTradeSchedule,
+	addDependency,
+	removeDependency,
+	getScheduleJobId,
+	getTradeSchedulesForJob,
+	getDependenciesForJob,
+	bulkUpdateScheduleDates,
+	updateTradeScheduleProgress,
+} from "@/lib/db/trade-schedules"
+import { cascadeForwardFromPhase } from "@/lib/schedule-cascade"
 import { toggleChecklistItem } from "@/lib/db/checklist-items"
 import { requireAuth, hasOrgMembership, createOrgForAdmin } from "@/lib/db/org"
 
@@ -54,9 +66,56 @@ export const addTradeScheduleAction = async (formData: FormData): Promise<void> 
 	revalidatePath(`/dashboard/jobs/${jobId}`)
 }
 
-export const updateTradeScheduleAction = async (id: string, startDate: string, endDate: string): Promise<void> => {
+export const updateTradeScheduleAction = async (
+	id: string,
+	startDate: string,
+	endDate: string
+): Promise<{ updated: Array<{ id: string; startDate: string; endDate: string }> }> => {
 	await updateTradeSchedule(id, startDate, endDate)
+
+	const jobId = await getScheduleJobId(id)
+	if (!jobId) {
+		revalidatePath("/dashboard")
+		return { updated: [] }
+	}
+
+	const [schedules, deps] = await Promise.all([
+		getTradeSchedulesForJob(jobId),
+		getDependenciesForJob(jobId),
+	])
+
+	// Use the edited dates for the changed phase (DB read may be stale)
+	const phasesForCascade = schedules.map((s) =>
+		s.id === id
+			? { id: s.id, startDate, endDate }
+			: { id: s.id, startDate: s.startDate, endDate: s.endDate }
+	)
+	const edges = deps.map((d) => ({ fromId: d.fromId, toId: d.toId, lagDays: 0 }))
+
+	const cascaded = cascadeForwardFromPhase(phasesForCascade, edges, id)
+	if (cascaded.length > 0) {
+		await bulkUpdateScheduleDates(
+			cascaded.map((c) => ({
+				id: c.id,
+				start_date: c.startDate,
+				end_date: c.endDate,
+			}))
+		)
+	}
+
 	revalidatePath("/dashboard")
+	revalidatePath(`/dashboard/jobs/${jobId}`)
+	return { updated: cascaded }
+}
+
+export const updateScheduleProgressAction = async (
+	id: string,
+	progress: number,
+	jobId: string
+): Promise<void> => {
+	await updateTradeScheduleProgress(id, progress)
+	revalidatePath("/dashboard")
+	revalidatePath(`/dashboard/jobs/${jobId}`)
 }
 
 export const deleteTradeScheduleAction = async (id: string, jobId: string): Promise<void> => {

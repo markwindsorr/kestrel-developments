@@ -2,7 +2,12 @@
 
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
-import { insertJob, updateJob as updateJobDb, deleteJob as deleteJobDb } from "@/lib/db/jobs"
+import {
+	insertJob,
+	updateJob as updateJobDb,
+	updateJobBudget as updateJobBudgetDb,
+	deleteJob as deleteJobDb,
+} from "@/lib/db/jobs"
 import {
 	getMaxSortOrder,
 	insertChecklistItem,
@@ -12,6 +17,30 @@ import {
 } from "@/lib/db/checklist-items"
 import { getTemplateItems } from "@/lib/db/checklist-templates"
 import { requireAuth, requireOrgContext } from "@/lib/db/org"
+import { applyDefaultScheduleTemplate } from "@/lib/apply-schedule"
+import { todayIso } from "@/lib/schedule-cascade"
+
+const parseNumber = (v: FormDataEntryValue | null): number | null => {
+	if (v === null) return null
+	const s = String(v).trim()
+	if (s === "") return null
+	const n = Number(s)
+	return Number.isFinite(n) ? n : null
+}
+
+const parseDate = (v: FormDataEntryValue | null): string | null => {
+	if (v === null) return null
+	const s = String(v).trim()
+	return s === "" ? null : s
+}
+
+const parseBudget = (formData: FormData) => ({
+	budget_days: parseNumber(formData.get("budgetDays")),
+	budget_hours_per_day: parseNumber(formData.get("budgetHoursPerDay")),
+	budget_workers: parseNumber(formData.get("budgetWorkers")),
+	planned_start_date: parseDate(formData.get("plannedStartDate")),
+	planned_end_date: parseDate(formData.get("plannedEndDate")),
+})
 
 export const createJob = async (
 	_prevState: { error: string },
@@ -34,6 +63,7 @@ export const createJob = async (
 		}
 
 		const templateId = formData.get("templateId") as string | null
+		const budget = parseBudget(formData)
 
 		const jobId = await insertJob({
 			name,
@@ -43,6 +73,7 @@ export const createJob = async (
 			color: color || "#2563eb",
 			org_id: orgContext.orgId,
 			template_id: templateId || null,
+			...budget,
 		})
 
 		if (templateId) {
@@ -56,6 +87,18 @@ export const createJob = async (
 			if (checklistRows.length > 0) {
 				await insertChecklistItems(checklistRows)
 			}
+		}
+
+		// Auto-apply default schedule template using planned start date (or today)
+		try {
+			await applyDefaultScheduleTemplate({
+				orgId: orgContext.orgId,
+				jobId,
+				startDate: budget.planned_start_date ?? todayIso(),
+			})
+		} catch (scheduleErr) {
+			// Don't block job creation if schedule install fails
+			console.error("Schedule template apply failed:", scheduleErr)
 		}
 
 		revalidatePath("/dashboard/jobs")
@@ -83,6 +126,7 @@ export const updateJob = async (
 	const clientName = formData.get("clientName") as string
 	const status = formData.get("status") as string
 	const color = formData.get("color") as string
+	const budget = parseBudget(formData)
 
 	try {
 		await updateJobDb(id, {
@@ -91,6 +135,7 @@ export const updateJob = async (
 			client_name: clientName,
 			status,
 			color,
+			...budget,
 		})
 	} catch (e) {
 		return { error: (e as Error).message }
@@ -100,6 +145,64 @@ export const updateJob = async (
 	revalidatePath(`/dashboard/jobs/${id}`)
 	revalidatePath("/dashboard")
 	return { error: "" }
+}
+
+export const updateJobBudget = async (
+	_prevState: { error: string },
+	formData: FormData
+) => {
+	try {
+		const { orgContext } = await requireOrgContext()
+		if (orgContext.role !== "admin" && orgContext.role !== "foreman") {
+			return { error: "Only admins and foremen can set budgets" }
+		}
+
+		const id = formData.get("id") as string
+		if (!id) return { error: "Missing job id" }
+
+		const budget = parseBudget(formData)
+		await updateJobBudgetDb(id, budget)
+
+		revalidatePath("/dashboard/jobs")
+		revalidatePath(`/dashboard/jobs/${id}`)
+		revalidatePath("/dashboard")
+		return { error: "" }
+	} catch (e) {
+		return { error: (e as Error).message }
+	}
+}
+
+export const applyScheduleTemplate = async (
+	_prevState: { error: string; installed?: number },
+	formData: FormData
+) => {
+	try {
+		const { orgContext } = await requireOrgContext()
+		if (orgContext.role !== "admin" && orgContext.role !== "foreman") {
+			return { error: "Only admins and foremen can apply schedule templates" }
+		}
+
+		const jobId = String(formData.get("jobId") ?? "")
+		const startDate = String(formData.get("startDate") ?? todayIso())
+		if (!jobId) return { error: "Missing job id" }
+
+		const installed = await applyDefaultScheduleTemplate({
+			orgId: orgContext.orgId,
+			jobId,
+			startDate,
+		})
+
+		if (installed === null) {
+			return { error: "No default schedule template exists for this org" }
+		}
+
+		revalidatePath(`/dashboard/jobs/${jobId}`)
+		revalidatePath("/dashboard/jobs")
+		revalidatePath("/dashboard")
+		return { error: "", installed }
+	} catch (e) {
+		return { error: (e as Error).message }
+	}
 }
 
 export const addChecklistItem = async (

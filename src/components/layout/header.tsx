@@ -1,16 +1,14 @@
 "use client"
 
 import { signOut } from "@/app/login/actions"
-import { CompanySwitcher } from "@/components/layout/company-switcher"
 
 interface HeaderProps {
 	onMenuToggle: () => void
 	userName: string
 	userRole: string
-	company: string
 }
 
-export function Header({ onMenuToggle, userName, userRole, company }: HeaderProps) {
+export function Header({ onMenuToggle, userName, userRole }: HeaderProps) {
 	return (
 		<header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-neutral-200 bg-white px-4 sm:px-6 lg:px-8">
 			<button
@@ -23,14 +21,8 @@ export function Header({ onMenuToggle, userName, userRole, company }: HeaderProp
 				</svg>
 			</button>
 
-			<div className="hidden lg:block">
-				<CompanySwitcher company={company} />
-			</div>
 
-			<div className="flex items-center gap-3">
-				<div className="lg:hidden">
-					<CompanySwitcher company={company} />
-				</div>
+			<div className="ml-auto flex items-center gap-3">
 				<div className="hidden text-right sm:block">
 					<p className="text-sm font-medium text-neutral-700">{userName}</p>
 					<p className="text-xs capitalize text-neutral-400">{userRole}</p>

@@ -47,3 +47,21 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Gantt chart: darken light gray task name text from the library */
+.gantt-wrapper [class*="taskListWrapper"],
+.gantt-wrapper [class*="taskListTableRow"],
+.gantt-wrapper [class*="taskListTableRow"] *,
+.gantt-wrapper [class*="taskListNameWrapper"],
+.gantt-wrapper [class*="taskListNameWrapper"] *,
+.gantt-wrapper [class*="taskListCell"],
+.gantt-wrapper [class*="ganttTable"] *,
+.gantt-wrapper [class*="ganttTable_Header"] * {
+  color: var(--color-neutral-900) !important;
+  font-weight: 500;
+}
+
+.gantt-wrapper text {
+  fill: var(--color-neutral-900) !important;
+  font-weight: 500;
+}

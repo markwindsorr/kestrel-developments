@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 export interface JobDocument {
 	id: string
@@ -30,7 +31,9 @@ function toDoc(r: Record<string, unknown>): JobDocument {
 
 export async function getJobDocuments(jobId: string): Promise<JobDocument[]> {
 	try {
-		const supabase = await createClient()
+		// Admin client: callers are already auth-gated + job-scoped. Ensures
+		// workers and subcontractors can see plans regardless of table RLS.
+		const supabase = createAdminClient()
 		const { data, error } = await supabase
 			.from("job_documents")
 			.select("*")
@@ -70,6 +73,40 @@ export async function insertJobDocument(fields: {
 	return data.id
 }
 
+/**
+ * Insert via the service role. Used by the upload API route, which has already
+ * authenticated the user and scoped the job — this lets anyone on the job
+ * (workers, subcontractors) upload regardless of job_documents RLS.
+ */
+export async function insertJobDocumentAdmin(fields: {
+	jobId: string
+	name: string
+	description?: string
+	storagePath: string
+	mimeType: string
+	fileSize?: number
+	category: string
+	uploadedBy?: string
+}): Promise<string> {
+	const admin = createAdminClient()
+	const { data, error } = await admin
+		.from("job_documents")
+		.insert({
+			job_id: fields.jobId,
+			name: fields.name,
+			description: fields.description ?? null,
+			storage_path: fields.storagePath,
+			mime_type: fields.mimeType,
+			file_size: fields.fileSize ?? null,
+			category: fields.category,
+			uploaded_by: fields.uploadedBy ?? null,
+		})
+		.select("id")
+		.single()
+	if (error) throw new Error(error.message)
+	return data.id
+}
+
 export async function deleteJobDocument(id: string): Promise<string | null> {
 	const supabase = await createClient()
 	const { data } = await supabase
@@ -84,8 +121,9 @@ export async function deleteJobDocument(id: string): Promise<string | null> {
 
 export async function getSignedUrl(storagePath: string): Promise<string | null> {
 	try {
-		const supabase = await createClient()
-		const { data } = await supabase.storage
+		// Admin client so signed URLs generate for every role on the job.
+		const admin = createAdminClient()
+		const { data } = await admin.storage
 			.from("project-documents")
 			.createSignedUrl(storagePath, 3600)
 		return data?.signedUrl ?? null

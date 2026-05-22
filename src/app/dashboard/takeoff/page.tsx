@@ -1,4 +1,7 @@
+import { redirect } from "next/navigation"
 import Link from "next/link"
+
+import { getOrgContext } from "@/lib/db/org"
 
 const TAKEOFF_TYPES = [
 	{
@@ -23,7 +26,10 @@ const TAKEOFF_TYPES = [
 	},
 ]
 
-export default function TakeoffPage() {
+export default async function TakeoffPage() {
+	const orgContext = await getOrgContext()
+	if (!orgContext || orgContext.role === "worker") redirect("/dashboard")
+
 	return (
 		<div>
 			<div className="mb-8">

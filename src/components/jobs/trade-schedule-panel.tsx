@@ -2,7 +2,11 @@
 
 import { useState, useTransition } from "react"
 import type { TradeSchedule } from "@/lib/db/trade-schedules"
-import { addTradeScheduleAction, deleteTradeScheduleAction } from "@/app/dashboard/actions"
+import {
+	addTradeScheduleAction,
+	deleteTradeScheduleAction,
+	updateScheduleProgressAction,
+} from "@/app/dashboard/actions"
 
 const TRADES = [
 	"Framing", "Electrical", "Plumbing", "HVAC", "Insulation",
@@ -43,6 +47,15 @@ export function TradeSchedulePanel({
 			await deleteTradeScheduleAction(id, jobId)
 		})
 	}
+
+	const setProgress = (id: string, progress: number) => {
+		startTransition(async () => {
+			await updateScheduleProgressAction(id, progress, jobId)
+		})
+	}
+
+	const statusOf = (p: number) =>
+		p >= 100 ? "done" : p > 0 ? "in-progress" : "not-started"
 
 	const inner = (
 		<>
@@ -126,6 +139,25 @@ export function TradeSchedulePanel({
 								</p>
 								<p className="text-xs text-neutral-400">{s.startDate} → {s.endDate}{s.notes ? ` · ${s.notes}` : ""}</p>
 							</div>
+							<select
+								value={statusOf(s.progress)}
+								onChange={(e) => {
+									const v = e.target.value
+									setProgress(s.id, v === "done" ? 100 : v === "in-progress" ? 50 : 0)
+								}}
+								className={`shrink-0 rounded-md border px-2 py-1 text-xs font-medium ${
+									s.progress >= 100
+										? "border-green-200 bg-green-50 text-green-700"
+										: s.progress > 0
+											? "border-amber-200 bg-amber-50 text-amber-700"
+											: "border-neutral-200 bg-white text-neutral-500"
+								}`}
+								title="Phase status"
+							>
+								<option value="not-started">Not started</option>
+								<option value="in-progress">In progress</option>
+								<option value="done">Done</option>
+							</select>
 							<button onClick={() => remove(s.id)} className="text-neutral-300 hover:text-red-500 transition-colors text-lg leading-none" title="Delete">×</button>
 						</li>
 					))}

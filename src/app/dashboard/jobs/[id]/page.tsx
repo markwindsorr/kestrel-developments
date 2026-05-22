@@ -13,7 +13,7 @@ import { getSelections } from "@/lib/db/selections"
 import { getWarrantyItems } from "@/lib/db/warranty-items"
 import { getJobDocuments, getSignedUrl } from "@/lib/db/job-documents"
 import { getJobPhotos, getSignedPhotoUrls } from "@/lib/db/job-photos"
-import { formatDuration, formatDate, formatTime } from "@/lib/utils"
+import { formatDate } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Checklist } from "@/components/jobs/checklist"
@@ -26,6 +26,8 @@ import { SelectionsPanel } from "@/components/jobs/selections-panel"
 import { WarrantyPanel } from "@/components/jobs/warranty-panel"
 import { PlansSpecsPanel } from "@/components/jobs/plans-specs-panel"
 import { PhotosPanel } from "@/components/jobs/photos-panel"
+import { BudgetEditor } from "@/components/jobs/budget-editor"
+import { ApplyScheduleButton } from "@/components/jobs/apply-schedule-button"
 
 export default async function JobDetailPage({
 	params,
@@ -66,7 +68,7 @@ export default async function JobDetailPage({
 	}
 
 	const canEdit = orgContext.role === "admin" || orgContext.role === "foreman"
-	const totalMinutes = timeEntries.reduce((sum, e) => sum + (e.duration ?? 0), 0)
+	const totalHours = timeEntries.reduce((sum, e) => sum + e.hours, 0)
 
 	const ganttSchedules = tradeSchedules.map(s => ({
 		...s,
@@ -127,11 +129,22 @@ export default async function JobDetailPage({
 			{/* ── Overview ── */}
 			{tab === "overview" && (
 				<div>
-					<div className="mb-6 grid gap-4 sm:grid-cols-3">
-						<Card>
-							<p className="text-2xl font-bold text-neutral-900">{formatDuration(totalMinutes)}</p>
-							<p className="text-sm text-neutral-500">Total Hours Logged</p>
-						</Card>
+					<div className="mb-6">
+						<BudgetEditor
+							jobId={id}
+							initial={{
+								budgetDays: job.budget_days,
+								budgetHoursPerDay: job.budget_hours_per_day,
+								budgetWorkers: job.budget_workers,
+								plannedStartDate: job.planned_start_date,
+								plannedEndDate: job.planned_end_date,
+							}}
+							hoursLogged={totalHours}
+							canEdit={canEdit}
+						/>
+					</div>
+
+					<div className="mb-6 grid gap-4 sm:grid-cols-2">
 						<Card>
 							<p className="text-2xl font-bold text-neutral-900">{timeEntries.length}</p>
 							<p className="text-sm text-neutral-500">Time Entries</p>
@@ -179,15 +192,15 @@ export default async function JobDetailPage({
 								<div className="space-y-3">
 									{timeEntries.slice(0, 10).map(entry => (
 										<div key={entry.id} className="flex items-center justify-between rounded-lg bg-neutral-50 px-3 py-2">
-											<div>
-												<p className="text-sm font-medium text-neutral-900">{entry.user.name}</p>
-												<p className="text-xs text-neutral-500">
-													{formatDate(entry.clockIn)} · {formatTime(entry.clockIn)}
-													{entry.clockOut && ` – ${formatTime(entry.clockOut)}`}
+											<div className="min-w-0">
+												<p className="text-sm font-medium text-neutral-900 truncate">{entry.user.name}</p>
+												<p className="text-xs text-neutral-500 truncate">
+													{formatDate(entry.workDate)}
+													{entry.dailyTask ? ` · ${entry.dailyTask}` : ""}
 												</p>
 											</div>
-											<div className="text-sm font-medium text-neutral-700">
-												{entry.duration ? formatDuration(entry.duration) : <Badge variant="success">Active</Badge>}
+											<div className="text-sm font-medium text-neutral-700 tabular-nums shrink-0">
+												{entry.hours.toFixed(1)}h
 											</div>
 										</div>
 									))}
@@ -200,20 +213,29 @@ export default async function JobDetailPage({
 
 			{/* ── Schedule ── */}
 			{tab === "schedule" && (
-				<div className="rounded-xl border border-neutral-200 bg-white overflow-hidden">
-					<div className="flex items-center justify-between px-5 py-4 border-b border-neutral-200">
-						<div>
-							<h2 className="font-semibold text-neutral-900">Trade Schedule</h2>
-							<p className="text-xs text-neutral-500 mt-0.5">
-								{tradeSchedules.length > 0
-									? `${tradeSchedules.length} phase${tradeSchedules.length !== 1 ? "s" : ""} scheduled`
-									: "No phases scheduled yet"}
-							</p>
+				<div className="space-y-4">
+					{canEdit && (
+						<ApplyScheduleButton
+							jobId={id}
+							defaultStartDate={job.planned_start_date ?? new Date().toISOString().slice(0, 10)}
+							hasExistingSchedule={tradeSchedules.length > 0}
+						/>
+					)}
+					<div className="rounded-xl border border-neutral-200 bg-white overflow-hidden">
+						<div className="flex items-center justify-between px-5 py-4 border-b border-neutral-200">
+							<div>
+								<h2 className="font-semibold text-neutral-900">Trade Schedule</h2>
+								<p className="text-xs text-neutral-500 mt-0.5">
+									{tradeSchedules.length > 0
+										? `${tradeSchedules.length} phase${tradeSchedules.length !== 1 ? "s" : ""} scheduled`
+										: "No phases scheduled yet"}
+								</p>
+							</div>
 						</div>
-					</div>
-					<GanttChart schedules={ganttSchedules} dependencies={dependencies} />
-					<div className="border-t border-neutral-100">
-						<TradeSchedulePanel jobId={id} schedules={tradeSchedules} embedded />
+						<GanttChart schedules={ganttSchedules} dependencies={dependencies} />
+						<div className="border-t border-neutral-100">
+							<TradeSchedulePanel jobId={id} schedules={tradeSchedules} embedded />
+						</div>
 					</div>
 				</div>
 			)}
