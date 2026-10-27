@@ -6,7 +6,7 @@ import { getChecklistItems } from "@/lib/db/checklist-items"
 import { getTimeEntriesByJob } from "@/lib/db/time-entries"
 import { getOrgContext } from "@/lib/db/org"
 import { getOrgMembers } from "@/lib/db/profiles"
-import { getEstimatesForJob } from "@/lib/db/estimates"
+import { getProjectsForJob } from "@/lib/db/projects"
 import { getTradeSchedulesForJob, getAllDependencies } from "@/lib/db/trade-schedules"
 import { getChangeOrders } from "@/lib/db/change-orders"
 import { getSelections } from "@/lib/db/selections"
@@ -28,6 +28,7 @@ import { PlansSpecsPanel } from "@/components/jobs/plans-specs-panel"
 import { PhotosPanel } from "@/components/jobs/photos-panel"
 import { BudgetEditor } from "@/components/jobs/budget-editor"
 import { ApplyScheduleButton } from "@/components/jobs/apply-schedule-button"
+import { resolveJobTab } from "@/lib/job-tabs"
 
 export default async function JobDetailPage({
 	params,
@@ -40,14 +41,17 @@ export default async function JobDetailPage({
 	if (!orgContext) redirect("/dashboard")
 
 	const { id } = await params
-	const { tab = "overview" } = await searchParams
+	const { tab: requestedTab = "overview" } = await searchParams
+	// Resolve to a tab this role may actually view — a spoofed ?tab=warranty
+	// falls back to overview, so the guarded blocks below never render.
+	const tab = resolveJobTab(requestedTab, orgContext.role)
 
-	const [job, checklist, timeEntries, members, estimates, tradeSchedules, allDeps, changeOrders, selections, warrantyItems, rawDocuments, rawPhotos] = await Promise.all([
+	const [job, checklist, timeEntries, members, projects, tradeSchedules, allDeps, changeOrders, selections, warrantyItems, rawDocuments, rawPhotos] = await Promise.all([
 		getJobById(id),
 		getChecklistItems(id),
 		getTimeEntriesByJob(id),
 		getOrgMembers(orgContext.orgId),
-		getEstimatesForJob(id),
+		getProjectsForJob(id),
 		getTradeSchedulesForJob(id),
 		getAllDependencies(),
 		getChangeOrders(id),
@@ -124,7 +128,7 @@ export default async function JobDetailPage({
 			</div>
 
 			{/* Tabs */}
-			<JobTabs active={tab} jobId={id} counts={tabCounts} />
+			<JobTabs active={tab} jobId={id} userRole={orgContext.role} counts={tabCounts} />
 
 			{/* ── Overview ── */}
 			{tab === "overview" && (
@@ -157,20 +161,22 @@ export default async function JobDetailPage({
 						</Card>
 					</div>
 
-					{estimates.length > 0 && (
+					{projects.length > 0 && (
 						<div className="mb-6 rounded-xl border border-neutral-200 bg-white p-5">
-							<h2 className="font-semibold text-neutral-900 mb-3">Estimates</h2>
+							<h2 className="font-semibold text-neutral-900 mb-3">Takeoff Projects</h2>
 							<div className="space-y-2">
-								{estimates.map(est => (
-									<div key={est.id} className="flex items-center justify-between rounded-lg border border-neutral-100 px-4 py-3">
+								{projects.map(p => (
+									<div key={p.id} className="flex items-center justify-between rounded-lg border border-neutral-100 px-4 py-3">
 										<div>
-											<p className="text-sm font-medium text-neutral-900">{est.name}</p>
+											<p className="text-sm font-medium text-neutral-900">{p.name}</p>
 											<p className="text-xs text-neutral-400 mt-0.5">
-												Updated {new Date(est.updatedAt).toLocaleDateString("en-CA")}
+												{p.measurements.length} measurement{p.measurements.length !== 1 ? "s" : ""}
+												{" · "}
+												Updated {new Date(p.updatedAt).toLocaleDateString("en-CA")}
 											</p>
 										</div>
 										<Link
-											href={`/dashboard/takeoff/house?estimate=${est.id}`}
+											href={`/dashboard/takeoff/house?project=${p.id}`}
 											className="rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 transition-colors"
 										>
 											Open in Takeoff

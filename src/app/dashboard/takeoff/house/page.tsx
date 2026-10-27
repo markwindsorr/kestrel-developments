@@ -1,33 +1,34 @@
 import { redirect } from "next/navigation"
-import { HouseTakeoff } from "@/components/house-takeoff"
-import { getCostRates } from "@/lib/db/cost-rates"
-import { getEstimates, getEstimateById } from "@/lib/db/estimates"
-import { getJobs } from "@/lib/db/jobs"
 import { getOrgContext } from "@/lib/db/org"
+import { getAssemblies } from "@/lib/db/assemblies"
+import { getProjects, getProjectById } from "@/lib/db/projects"
+import { getJobs } from "@/lib/db/jobs"
+import { HouseTakeoffClient } from "./house-takeoff-client"
 
 export default async function HouseTakeoffPage({
 	searchParams,
 }: {
-	searchParams: Promise<{ estimate?: string }>
+	searchParams: Promise<{ project?: string }>
 }) {
 	const orgContext = await getOrgContext()
 	if (!orgContext || orgContext.role === "worker") redirect("/dashboard")
 
-	const { estimate } = await searchParams
+	const { project: projectId } = await searchParams
 
-	const [rates, dbEstimates, jobs, initialEstimate] = await Promise.all([
-		getCostRates(),
-		getEstimates(),
+	const [assemblies, projects, jobs, activeProject] = await Promise.all([
+		getAssemblies(),
+		getProjects(),
 		getJobs(orgContext.orgId),
-		estimate ? getEstimateById(estimate) : Promise.resolve(null),
+		projectId ? getProjectById(projectId) : Promise.resolve(null),
 	])
 
 	return (
-		<HouseTakeoff
-			rates={rates}
-			dbEstimates={dbEstimates}
-			availableJobs={jobs}
-			initialEstimate={initialEstimate ?? undefined}
+		<HouseTakeoffClient
+			initialAssemblies={assemblies}
+			initialProjects={projects}
+			initialProject={activeProject}
+			jobs={jobs}
+			role={orgContext.role}
 		/>
 	)
 }
