@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Third-party bundles served verbatim from /public — never lint these.
+    "public/sw.js",
+    "public/pdf.worker.min.mjs",
   ]),
 ]);
 
